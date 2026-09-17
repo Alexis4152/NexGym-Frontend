@@ -1,10 +1,18 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { SECTIONS } from '../config/sections.js';
 
 export default function Layout() {
   const { user, hasSection, isAdmin, isSuperAdmin, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const mainRef = useRef(null);
+
+  useEffect(() => {
+    mainRef.current?.scrollTo(0, 0);
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
 
   const visibleSections = SECTIONS.filter((s) => {
     if (s.code === 'CENTROS') return isSuperAdmin;
@@ -17,7 +25,7 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
+    <div className="h-screen flex bg-gray-50 overflow-hidden">
       <aside className="w-64 shrink-0 bg-white border-r border-gray-200 flex flex-col">
         <div className="px-5 py-4 border-b border-gray-200">
           <p className="font-bold text-brand-700 text-lg leading-tight">NexoraSport</p>
@@ -59,7 +67,7 @@ export default function Layout() {
           </button>
         </div>
       </aside>
-      <main className="flex-1 overflow-y-auto p-6">
+      <main ref={mainRef} className="flex-1 overflow-y-auto p-6">
         <Outlet />
       </main>
     </div>

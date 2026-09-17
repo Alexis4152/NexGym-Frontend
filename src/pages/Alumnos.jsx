@@ -5,6 +5,7 @@ import * as disciplinasApi from '../api/disciplinas';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
+import PhoneInput from '../components/PhoneInput.jsx';
 
 const emptyForm = {
   nombre: '', fechaNacimiento: '', telefono: '', email: '',
@@ -168,7 +169,7 @@ export default function Alumnos() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Telefono</label>
-                <input className="input" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
+                <PhoneInput value={form.telefono} onChange={(v) => setForm({ ...form, telefono: v })} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Correo</label>
@@ -182,7 +183,7 @@ export default function Alumnos() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Telefono de emergencia</label>
-                <input className="input" value={form.contactoEmergenciaTelefono} onChange={(e) => setForm({ ...form, contactoEmergenciaTelefono: e.target.value })} />
+                <PhoneInput value={form.contactoEmergenciaTelefono} onChange={(v) => setForm({ ...form, contactoEmergenciaTelefono: v })} />
               </div>
             </div>
             {modal.editing && (

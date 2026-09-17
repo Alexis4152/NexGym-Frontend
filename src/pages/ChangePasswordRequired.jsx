@@ -11,8 +11,6 @@ export default function ChangePasswordRequired() {
   const { notify } = useNotify();
   const navigate = useNavigate();
 
-  if (!user) navigate('/login');
-
   async function handleSubmit(e) {
     e.preventDefault();
     if (newPassword.length < 8) {

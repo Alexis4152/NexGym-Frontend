@@ -3,7 +3,7 @@ import * as disciplinasApi from '../api/disciplinas';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
 
-const emptyForm = { nombre: '', descripcion: '', icono: '', color: '#1c6690', modalidad: 'CLASES', limiteAlumnos: '' };
+const emptyForm = { nombre: '', descripcion: '', icono: '', color: '#1c6690', modalidad: 'CLASES', limiteAlumnos: '', requiereInstalacion: true };
 
 export default function Disciplinas() {
   const [items, setItems] = useState([]);
@@ -34,6 +34,7 @@ export default function Disciplinas() {
       color: d.color || '#1c6690',
       modalidad: d.modalidad,
       limiteAlumnos: d.limiteAlumnos ?? '',
+      requiereInstalacion: d.requiereInstalacion ?? true,
     });
     setErrors({});
     setModal({ editing: d.id });
@@ -96,6 +97,7 @@ export default function Disciplinas() {
             <p className="text-xs text-gray-400 mb-3">
               {d.modalidad === 'CLASES' ? 'Por clases' : 'Acceso libre'}
               {d.limiteAlumnos ? ` · limite ${d.limiteAlumnos} alumnos` : ''}
+              {d.requiereInstalacion ? ' · requiere instalacion' : ' · sin instalacion especifica'}
             </p>
             <div className="flex gap-2">
               <button className="btn-secondary text-xs" onClick={() => openEdit(d)}>
@@ -176,6 +178,14 @@ export default function Disciplinas() {
                 />
               </div>
             </div>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={form.requiereInstalacion}
+                onChange={(e) => setForm({ ...form, requiereInstalacion: e.target.checked })}
+              />
+              Requiere seleccionar una instalacion al crear una clase
+            </label>
             <button className="btn-primary w-full mt-2">{modal.editing ? 'Guardar cambios' : 'Crear disciplina'}</button>
           </form>
         </Modal>
