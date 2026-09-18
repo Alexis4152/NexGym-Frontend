@@ -7,7 +7,8 @@ import Pagination from '../components/Pagination.jsx';
 
 const emptyForm = {
   categoriaId: '', nombre: '', tipo: 'EQUIPO', codigoBarras: '', stock: 0, stockMinimo: 0,
-  costo: '', precioVenta: '', vendible: false, disciplinaIds: [],
+  costo: '', precioVenta: '', vendible: false, reservable: false, descuentoApartadoPorcentaje: '',
+  disciplinaIds: [],
 };
 
 export default function Inventario() {
@@ -18,6 +19,8 @@ export default function Inventario() {
   const [disciplinas, setDisciplinas] = useState([]);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [imagenes, setImagenes] = useState([]);
+  const [subiendoImagen, setSubiendoImagen] = useState(false);
   const [modalAjuste, setModalAjuste] = useState(null);
   const [ajusteDelta, setAjusteDelta] = useState(1);
   const [ajusteRazon, setAjusteRazon] = useState('');
@@ -41,18 +44,24 @@ export default function Inventario() {
   function loadCategorias() {
     inventarioApi.listCategoriasInventario().then(({ data }) => setCategorias(data.data));
   }
+  function loadImagenes(articuloId) {
+    inventarioApi.listImagenesArticulo(articuloId).then(({ data }) => setImagenes(data.data));
+  }
 
   function openCreate() {
     setForm(emptyForm);
+    setImagenes([]);
     setModal({ editing: null });
   }
   function openEdit(a) {
     setForm({
       categoriaId: a.categoriaId || '', nombre: a.nombre, tipo: a.tipo, codigoBarras: a.codigoBarras || '',
       stock: a.stock, stockMinimo: a.stockMinimo, costo: a.costo ?? '', precioVenta: a.precioVenta ?? '',
-      vendible: a.vendible, disciplinaIds: a.disciplinaIds || [],
+      vendible: a.vendible, reservable: a.reservable, descuentoApartadoPorcentaje: a.descuentoApartadoPorcentaje ?? '',
+      disciplinaIds: a.disciplinaIds || [],
     });
     setModal({ editing: a.id });
+    loadImagenes(a.id);
   }
 
   function toggleDisciplina(id) {
@@ -80,20 +89,53 @@ export default function Inventario() {
       stockMinimo: Number(form.stockMinimo),
       costo: form.costo === '' ? null : Number(form.costo),
       precioVenta: form.precioVenta === '' ? null : Number(form.precioVenta),
+      descuentoApartadoPorcentaje: form.descuentoApartadoPorcentaje === '' ? null : Number(form.descuentoApartadoPorcentaje),
     };
     try {
       if (modal.editing) {
         await inventarioApi.updateArticulo(modal.editing, payload);
         notify('Articulo actualizado', 'success');
+        setModal(null);
       } else {
-        await inventarioApi.createArticulo(payload);
-        notify('Articulo creado', 'success');
+        const { data } = await inventarioApi.createArticulo(payload);
+        notify('Articulo creado, ya puedes subir fotos', 'success');
+        setModal({ editing: data.data.id });
+        setImagenes([]);
       }
-      setModal(null);
       load();
     } catch (err) {
       notify(err.response?.data?.message || 'No se pudo guardar el articulo', 'error');
     }
+  }
+
+  async function handleSubirImagen(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSubiendoImagen(true);
+    try {
+      await inventarioApi.subirImagenArticulo(modal.editing, file);
+      loadImagenes(modal.editing);
+      load();
+    } catch (err) {
+      notify(err.response?.data?.message || 'No se pudo subir la imagen', 'error');
+    } finally {
+      setSubiendoImagen(false);
+      e.target.value = '';
+    }
+  }
+
+  async function marcarPrincipal(imagenId) {
+    await inventarioApi.marcarImagenPrincipal(modal.editing, imagenId);
+    loadImagenes(modal.editing);
+    load();
+  }
+
+  async function eliminarImagen(imagenId) {
+    const ok = await confirmDialog('Quitar esta foto?', { danger: true });
+    if (!ok) return;
+    await inventarioApi.eliminarImagenArticulo(modal.editing, imagenId);
+    loadImagenes(modal.editing);
+    load();
   }
 
   async function handleDeactivate(a) {
@@ -136,6 +178,7 @@ export default function Inventario() {
               <th>Disciplinas</th>
               <th>Stock</th>
               <th>Tienda</th>
+              <th>Apartable</th>
               <th></th>
             </tr>
           </thead>
@@ -147,6 +190,7 @@ export default function Inventario() {
                 <td className="text-gray-600">{a.disciplinaNombres?.join(', ') || '-'}</td>
                 <td className={a.stock <= a.stockMinimo ? 'text-red-600 font-medium' : 'text-gray-700'}>{a.stock}</td>
                 <td>{a.vendible ? <span className="text-emerald-600">Si · ${a.precioVenta ?? 0}</span> : <span className="text-gray-400">No</span>}</td>
+                <td>{a.reservable ? <span className="text-emerald-600">Si</span> : <span className="text-gray-400">No</span>}</td>
                 <td className="text-right space-x-2">
                   <button className="text-brand-600 hover:underline" onClick={() => setModalAjuste(a)}>Ajustar</button>
                   <button className="text-brand-600 hover:underline" onClick={() => openEdit(a)}>Editar</button>
@@ -155,7 +199,7 @@ export default function Inventario() {
               </tr>
             ))}
             {pageData.content.length === 0 && (
-              <tr><td colSpan={6} className="py-6 text-center text-gray-400">Sin resultados</td></tr>
+              <tr><td colSpan={7} className="py-6 text-center text-gray-400">Sin resultados</td></tr>
             )}
           </tbody>
         </table>
@@ -179,6 +223,33 @@ export default function Inventario() {
                   <option value="OTRO">Otro</option>
                 </select>
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Fotos</label>
+              {modal.editing ? (
+                <div className="flex flex-wrap gap-2">
+                  {imagenes.map((img) => (
+                    <div key={img.id} className="relative w-20 h-20 rounded-lg overflow-hidden group border border-gray-200">
+                      <img src={img.ruta} alt="" className="w-full h-full object-cover" />
+                      {img.esPrincipal && (
+                        <span className="absolute top-0 left-0 bg-brand-600 text-white text-[10px] px-1 rounded-br">Portada</span>
+                      )}
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 transition-opacity">
+                        {!img.esPrincipal && (
+                          <button type="button" className="text-white text-[10px]" onClick={() => marcarPrincipal(img.id)}>⭐ Portada</button>
+                        )}
+                        <button type="button" className="text-white text-[10px]" onClick={() => eliminarImagen(img.id)}>✕ Quitar</button>
+                      </div>
+                    </div>
+                  ))}
+                  <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer text-gray-400 hover:border-brand-400 hover:text-brand-500 text-xs text-center">
+                    {subiendoImagen ? '...' : '+ Foto'}
+                    <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleSubirImagen} disabled={subiendoImagen} />
+                  </label>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400">Guarda el articulo primero; despues podras subir fotos aqui mismo.</p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -223,6 +294,17 @@ export default function Inventario() {
               <input type="checkbox" checked={form.vendible} onChange={(e) => setForm({ ...form, vendible: e.target.checked })} />
               Mostrar en la tienda / catalogo publico
             </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={form.reservable} onChange={(e) => setForm({ ...form, reservable: e.target.checked })} />
+              Se puede apartar desde la tienda en linea
+            </label>
+            {form.reservable && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Descuento publico por apartado (%, opcional)</label>
+                <input type="number" step="0.01" min="0" max="100" className="input" value={form.descuentoApartadoPorcentaje}
+                  onChange={(e) => setForm({ ...form, descuentoApartadoPorcentaje: e.target.value })} />
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Disciplinas relacionadas</label>
               <div className="flex flex-wrap gap-2">

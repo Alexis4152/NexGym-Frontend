@@ -8,6 +8,7 @@ import ResetPassword from './pages/ResetPassword.jsx';
 import ChangePasswordRequired from './pages/ChangePasswordRequired.jsx';
 import SelectCentro from './pages/SelectCentro.jsx';
 import PublicCatalog from './pages/PublicCatalog.jsx';
+import PublicApartar from './pages/PublicApartar.jsx';
 
 import Dashboard from './pages/Dashboard.jsx';
 import Alumnos from './pages/Alumnos.jsx';
@@ -35,6 +36,7 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/tienda/:slug" element={<PublicCatalog />} />
+      <Route path="/apartar/:slug" element={<PublicApartar />} />
 
       {/* Autenticadas, sin sidebar */}
       <Route

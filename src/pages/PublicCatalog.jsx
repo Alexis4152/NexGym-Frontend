@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import * as publicApi from '../api/public';
 import { applyBrandColor } from '../utils/theme';
 
@@ -40,6 +40,12 @@ export default function PublicCatalog() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-8">
+        {centro.apartadosActivo && (
+          <div className="bg-brand-50 border border-brand-100 text-brand-800 text-sm rounded-lg px-4 py-3 mb-6 flex items-center justify-between flex-wrap gap-2">
+            <span>¿Quieres apartar un producto y pagarlo al recogerlo?</span>
+            <Link to={`/apartar/${slug}`} className="btn-primary text-sm">Apartar en linea</Link>
+          </div>
+        )}
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Tienda</h2>
         {productos.length === 0 ? (
           <p className="text-sm text-gray-500">Aun no hay productos publicados.</p>

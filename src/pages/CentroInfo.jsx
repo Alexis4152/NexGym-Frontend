@@ -67,6 +67,38 @@ export default function CentroInfo() {
           <p className="text-xs text-gray-400 mt-1">{window.location.origin}/tienda/{form.slugPublico || '...'}</p>
         </div>
 
+        <hr className="border-gray-100" />
+        <h2 className="font-semibold text-gray-800">Apartados en linea</h2>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={form.apartadosActivo} onChange={(e) => setForm({ ...form, apartadosActivo: e.target.checked })} />
+          Habilitar apartados desde la tienda publica
+        </label>
+        {form.apartadosActivo && (
+          <p className="text-xs text-gray-400 -mt-2">{window.location.origin}/apartar/{form.slugPublico || '...'}</p>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Horas para recoger (por defecto)</label>
+            <input type="number" min="1" className="input" value={form.horasApartadoDefault ?? 24}
+              onChange={(e) => setForm({ ...form, horasApartadoDefault: Number(e.target.value) })} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Descuento maximo por monto ($, opcional)</label>
+            <input type="number" step="0.01" className="input" value={form.montoMaximoDescuentoApartado ?? ''}
+              onChange={(e) => setForm({ ...form, montoMaximoDescuentoApartado: e.target.value === '' ? null : Number(e.target.value) })} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Descuento maximo por % (opcional)</label>
+            <input type="number" step="0.01" className="input" value={form.porcentajeMaximoDescuentoApartado ?? ''}
+              onChange={(e) => setForm({ ...form, porcentajeMaximoDescuentoApartado: e.target.value === '' ? null : Number(e.target.value) })} />
+          </div>
+        </div>
+        <p className="text-xs text-gray-400 -mt-2">
+          Si ambos quedan vacios, no se podran aplicar descuentos al confirmar un apartado.
+        </p>
+
         <button className="btn-primary w-full mt-2">Guardar cambios</button>
       </form>
     </div>
