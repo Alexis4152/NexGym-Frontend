@@ -4,6 +4,7 @@ import * as disciplinasApi from '../api/disciplinas';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
+import PhoneInput from '../components/PhoneInput.jsx';
 
 const emptyForm = { nombre: '', telefono: '', email: '', especialidad: '', disciplinaIds: [] };
 
@@ -15,6 +16,9 @@ export default function Instructores() {
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState({});
+  const [documentos, setDocumentos] = useState([]);
+  const [subiendoDocumento, setSubiendoDocumento] = useState(false);
+  const [disciplinaDocumento, setDisciplinaDocumento] = useState('');
   const { notify, confirmDialog } = useNotify();
 
   useEffect(() => {
@@ -31,15 +35,23 @@ export default function Instructores() {
     instructoresApi.listInstructores(q, page, 20).then(({ data }) => setPageData(data.data));
   }
 
+  function loadDocumentos(instructorId) {
+    instructoresApi.listDocumentosInstructor(instructorId).then(({ data }) => setDocumentos(data.data));
+  }
+
   function openCreate() {
     setForm(emptyForm);
     setErrors({});
+    setDocumentos([]);
+    setDisciplinaDocumento('');
     setModal({ editing: null });
   }
 
   function openEdit(i) {
     setForm({ nombre: i.nombre, telefono: i.telefono || '', email: i.email || '', especialidad: i.especialidad || '', disciplinaIds: i.disciplinaIds || [] });
     setErrors({});
+    setDisciplinaDocumento('');
+    loadDocumentos(i.id);
     setModal({ editing: i.id });
   }
 
@@ -56,19 +68,52 @@ export default function Instructores() {
       setErrors({ nombre: 'El nombre es obligatorio' });
       return;
     }
+    if (form.disciplinaIds.length === 0) {
+      setErrors({ disciplinaIds: 'Selecciona al menos una disciplina' });
+      return;
+    }
     try {
       if (modal.editing) {
         await instructoresApi.updateInstructor(modal.editing, form);
         notify('Instructor actualizado', 'success');
+        setModal(null);
       } else {
-        await instructoresApi.createInstructor(form);
-        notify('Instructor creado', 'success');
+        const { data } = await instructoresApi.createInstructor(form);
+        notify('Instructor creado, ya puedes subir sus diplomas', 'success');
+        setModal({ editing: data.data.id });
+        setDocumentos([]);
       }
-      setModal(null);
       load();
     } catch (err) {
       setErrors(err.response?.data?.data || {});
     }
+  }
+
+  async function handleSubirDocumento(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!disciplinaDocumento) {
+      notify('Selecciona a que disciplina corresponde el documento', 'error');
+      e.target.value = '';
+      return;
+    }
+    setSubiendoDocumento(true);
+    try {
+      await instructoresApi.subirDocumentoInstructor(modal.editing, disciplinaDocumento, file);
+      loadDocumentos(modal.editing);
+    } catch (err) {
+      notify(err.response?.data?.message || 'No se pudo subir el documento', 'error');
+    } finally {
+      setSubiendoDocumento(false);
+      e.target.value = '';
+    }
+  }
+
+  async function eliminarDocumento(documentoId) {
+    const ok = await confirmDialog('Quitar este documento?', { danger: true });
+    if (!ok) return;
+    await instructoresApi.eliminarDocumentoInstructor(modal.editing, documentoId);
+    loadDocumentos(modal.editing);
   }
 
   async function handleDeactivate(i) {
@@ -138,19 +183,17 @@ export default function Instructores() {
               <input className="input" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
               {errors.nombre && <p className="text-xs text-red-600 mt-1">{errors.nombre}</p>}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Telefono</label>
-                <input className="input" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Correo</label>
-                <input className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Telefono</label>
+              <PhoneInput value={form.telefono} onChange={(v) => setForm({ ...form, telefono: v })} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Correo</label>
+              <input className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Especialidad</label>
-              <input className="input" value={form.especialidad} onChange={(e) => setForm({ ...form, especialidad: e.target.value })} />
+              <input className="input" maxLength={200} value={form.especialidad} onChange={(e) => setForm({ ...form, especialidad: e.target.value })} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Disciplinas que imparte</label>
@@ -171,6 +214,42 @@ export default function Instructores() {
                   </button>
                 ))}
               </div>
+              {errors.disciplinaIds && <p className="text-xs text-red-600 mt-1">{errors.disciplinaIds}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Diplomas / Titulos</label>
+              {modal.editing ? (
+                <div className="space-y-2">
+                  {documentos.length > 0 && (
+                    <ul className="divide-y divide-gray-100 border border-gray-200 rounded-lg">
+                      {documentos.map((d) => (
+                        <li key={d.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                          <a href={d.ruta} target="_blank" rel="noreferrer" className="text-brand-600 hover:underline truncate">
+                            {d.disciplinaNombre} — {d.nombreOriginal || 'documento'}
+                          </a>
+                          <button type="button" className="text-red-600 text-xs hover:underline shrink-0 ml-2" onClick={() => eliminarDocumento(d.id)}>
+                            Quitar
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="flex gap-2">
+                    <select className="input flex-1" value={disciplinaDocumento} onChange={(e) => setDisciplinaDocumento(e.target.value)}>
+                      <option value="">Selecciona disciplina...</option>
+                      {disciplinas.filter((d) => form.disciplinaIds.includes(d.id)).map((d) => (
+                        <option key={d.id} value={d.id}>{d.nombre}</option>
+                      ))}
+                    </select>
+                    <label className="btn-secondary shrink-0 cursor-pointer flex items-center px-3 text-sm">
+                      {subiendoDocumento ? '...' : '+ Archivo'}
+                      <input type="file" accept="image/png,image/jpeg,image/webp,application/pdf" className="hidden" onChange={handleSubirDocumento} disabled={subiendoDocumento} />
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400">Guarda el instructor primero; despues podras subir sus diplomas aqui mismo.</p>
+              )}
             </div>
             <button className="btn-primary w-full mt-2">{modal.editing ? 'Guardar cambios' : 'Crear instructor'}</button>
           </form>

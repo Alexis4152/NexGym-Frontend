@@ -31,6 +31,9 @@ export default function Clases() {
   const unicaSucursal = sucursales.length === 1 ? sucursales[0] : null;
   const disciplinaSeleccionada = disciplinas.find((d) => String(d.id) === String(form.disciplinaId));
   const requiereInstalacion = disciplinaSeleccionada ? disciplinaSeleccionada.requiereInstalacion : true;
+  const instructoresFiltrados = form.disciplinaId
+    ? instructores.filter((i) => i.disciplinaIds?.some((id) => String(id) === String(form.disciplinaId)))
+    : [];
 
   useEffect(() => {
     load();
@@ -378,17 +381,20 @@ export default function Clases() {
             )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Disciplina</label>
-              <select className="input" value={form.disciplinaId} onChange={(e) => setForm({ ...form, disciplinaId: e.target.value, lugarId: '' })}>
+              <select className="input" value={form.disciplinaId} onChange={(e) => setForm({ ...form, disciplinaId: e.target.value, lugarId: '', instructorId: '' })}>
                 <option value="">Selecciona...</option>
                 {disciplinas.map((d) => <option key={d.id} value={d.id}>{d.nombre}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Instructor</label>
-              <select className="input" value={form.instructorId} onChange={(e) => setForm({ ...form, instructorId: e.target.value })}>
+              <select className="input" value={form.instructorId} onChange={(e) => setForm({ ...form, instructorId: e.target.value })} disabled={!form.disciplinaId}>
                 <option value="">Sin asignar</option>
-                {instructores.map((i) => <option key={i.id} value={i.id}>{i.nombre}</option>)}
+                {instructoresFiltrados.map((i) => <option key={i.id} value={i.id}>{i.nombre}</option>)}
               </select>
+              {form.disciplinaId && instructoresFiltrados.length === 0 && (
+                <p className="text-xs text-gray-400 mt-1">Ningun instructor registrado imparte esta disciplina.</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Dia</label>
