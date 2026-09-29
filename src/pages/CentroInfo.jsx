@@ -7,6 +7,7 @@ import { applyBrandColor } from '../utils/theme';
 export default function CentroInfo() {
   const { user, actingCentroId } = useAuth();
   const [form, setForm] = useState(null);
+  const [subiendoLogo, setSubiendoLogo] = useState(false);
   const { notify } = useNotify();
   const centroId = user?.centroId || actingCentroId;
 
@@ -23,6 +24,22 @@ export default function CentroInfo() {
       notify('Configuracion actualizada', 'success');
     } catch (err) {
       notify(err.response?.data?.message || 'No se pudo guardar', 'error');
+    }
+  }
+
+  async function handleSubirLogo(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSubiendoLogo(true);
+    try {
+      const { data } = await centrosApi.uploadLogoCentro(centroId, file);
+      setForm(data.data);
+      notify('Logo actualizado', 'success');
+    } catch (err) {
+      notify(err.response?.data?.message || 'No se pudo subir el logo', 'error');
+    } finally {
+      setSubiendoLogo(false);
+      e.target.value = '';
     }
   }
 
@@ -53,6 +70,21 @@ export default function CentroInfo() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Color de marca</label>
           <input type="color" className="input h-10" value={form.colorPrimario || '#1c6690'} onChange={(e) => setForm({ ...form, colorPrimario: e.target.value })} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Logo</label>
+          <div className="flex items-center gap-3">
+            {form.logoUrl ? (
+              <img src={form.logoUrl} alt="" className="w-16 h-16 rounded-lg object-contain border border-gray-200 bg-white" />
+            ) : (
+              <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 text-2xl">🏢</div>
+            )}
+            <label className="btn-secondary text-sm cursor-pointer">
+              {subiendoLogo ? 'Subiendo...' : 'Cambiar logo'}
+              <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleSubirLogo} disabled={subiendoLogo} />
+            </label>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">Aparece en el catalogo publico y en el folleto/QR de apartados.</p>
         </div>
 
         <hr className="border-gray-100" />
@@ -98,6 +130,44 @@ export default function CentroInfo() {
         <p className="text-xs text-gray-400 -mt-2">
           Si ambos quedan vacios, no se podran aplicar descuentos al confirmar un apartado.
         </p>
+
+        <hr className="border-gray-100" />
+        <h2 className="font-semibold text-gray-800">Notificaciones</h2>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={form.notificacionesMembresiaActivo}
+            onChange={(e) => setForm({ ...form, notificacionesMembresiaActivo: e.target.checked })} />
+          Avisos de membresias (vencimientos, pagos, renovaciones)
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={form.notificacionesClaseActivo}
+            onChange={(e) => setForm({ ...form, notificacionesClaseActivo: e.target.checked })} />
+          Avisos de clases (reservas, recordatorios, cambios y cancelaciones)
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={form.notificacionesEmailActivo}
+            onChange={(e) => setForm({ ...form, notificacionesEmailActivo: e.target.checked })} />
+          Enviar por correo electronico
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={form.notificacionesInternoActivo}
+            onChange={(e) => setForm({ ...form, notificacionesInternoActivo: e.target.checked })} />
+          Mostrar en la campana interna
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Avisar vencimiento (dias antes)</label>
+            <input className="input" value={form.notificacionesDiasAntesVencimiento || ''}
+              onChange={(e) => setForm({ ...form, notificacionesDiasAntesVencimiento: e.target.value })}
+              placeholder="7,3,1,0" />
+            <p className="text-xs text-gray-400 mt-1">Lista separada por comas. 0 = el mismo dia.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Recordatorio de clase (horas antes)</label>
+            <input type="number" min="0" className="input" value={form.notificacionesHorasAntesClase ?? ''}
+              onChange={(e) => setForm({ ...form, notificacionesHorasAntesClase: e.target.value === '' ? null : Number(e.target.value) })} />
+            <p className="text-xs text-gray-400 mt-1">Vacio o 0 desactiva el recordatorio.</p>
+          </div>
+        </div>
 
         <button className="btn-primary w-full mt-2">Guardar cambios</button>
       </form>

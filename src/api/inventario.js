@@ -3,8 +3,8 @@ import api from './axios';
 export const listCategoriasInventario = () => api.get('/inventario/categorias');
 export const createCategoriaInventario = (data) => api.post('/inventario/categorias', data);
 
-export const listArticulos = (q = '', page = 0, size = 20) =>
-  api.get('/inventario/articulos', { params: { q: q || undefined, page, size } });
+export const listArticulos = (q = '', page = 0, size = 20, categoriaId = '', soloStockBajo = false) =>
+  api.get('/inventario/articulos', { params: { q: q || undefined, categoriaId: categoriaId || undefined, soloStockBajo, page, size } });
 export const listStockBajo = () => api.get('/inventario/articulos/stock-bajo');
 export const buscarArticuloPorCodigoBarras = (codigo) =>
   api.get(`/inventario/articulos/por-codigo/${encodeURIComponent(codigo)}`);

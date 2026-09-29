@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import * as inventarioApi from '../api/inventario';
 import * as ventasApi from '../api/ventas';
 import * as cortesCajaApi from '../api/cortesCaja';
@@ -9,10 +10,10 @@ const SCAN_GAP_MS = 50;
 const MIN_CODE_LENGTH = 3;
 
 const METODOS_PAGO = [
-  { value: 'EFECTIVO', label: 'Efectivo' },
-  { value: 'TARJETA', label: 'Tarjeta' },
-  { value: 'TRANSFERENCIA', label: 'Transferencia' },
-  { value: 'OTRO', label: 'Otro' },
+  { value: 'EFECTIVO', label: '💵 Efectivo' },
+  { value: 'TARJETA', label: '💳 Tarjeta' },
+  { value: 'TRANSFERENCIA', label: '🏦 Transferencia' },
+  { value: 'OTRO', label: '🔖 Otro' },
 ];
 
 const TIPOS_TICKET = [
@@ -39,6 +40,14 @@ export default function VentaPos() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [highlighted, setHighlighted] = useState(0);
+  const [categorias, setCategorias] = useState([]);
+  const [categoriaId, setCategoriaId] = useState('');
+  // Se incrementa al hacer click en un chip de categoria (incluso el que ya esta activo)
+  // para forzar una recarga del catalogo, igual que en DemoPV.
+  const [browseRefresh, setBrowseRefresh] = useState(0);
+  // 'list': fila de texto. 'images': cuadricula con la imagen del articulo (usa
+  // ArticuloInventarioDto.imagenUrl, ya existente). Se recuerda entre sesiones.
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('nexorasport_pos_view_mode') || 'list');
   const [cart, setCart] = useState([]);
   const [metodoPago, setMetodoPago] = useState('EFECTIVO');
   const [montoRecibido, setMontoRecibido] = useState('');
@@ -55,6 +64,7 @@ export default function VentaPos() {
 
   useEffect(() => {
     cargarCorte();
+    inventarioApi.listCategoriasInventario().then(({ data }) => setCategorias(data.data));
   }, []);
 
   function cargarCorte() {
@@ -64,20 +74,29 @@ export default function VentaPos() {
       .finally(() => setLoadingCorte(false));
   }
 
-  // Busqueda por texto con debounce
+  // Busqueda/catalogo con debounce: con texto se piden hasta 8 (autocompletar); sin
+  // texto se navega el catalogo completo (hasta 50), opcionalmente filtrado por
+  // categoria -- igual que el punto de venta de DemoPV.
   useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
     const t = setTimeout(() => {
-      inventarioApi.listArticulos(query, 0, 8).then(({ data }) => {
+      inventarioApi.listArticulos(query, 0, query.trim() ? 8 : 50, categoriaId).then(({ data }) => {
         setResults(data.data.content.filter((a) => a.vendible && a.activo));
         setHighlighted(0);
       });
     }, 250);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, categoriaId, browseRefresh]);
+
+  function selectCategory(id) {
+    setCategoriaId(id);
+    setBrowseRefresh((n) => n + 1);
+    searchInputRef.current?.focus();
+  }
+
+  function changeViewMode(mode) {
+    setViewMode(mode);
+    localStorage.setItem('nexorasport_pos_view_mode', mode);
+  }
 
   // Deteccion de escaneo: un lector de codigo de barras "escribe" muy rapido y termina con Enter
   useEffect(() => {
@@ -170,9 +189,13 @@ export default function VentaPos() {
         cantidad: 1, stock: articulo.stock, descuento: 0,
       }];
     });
-    setQuery('');
-    setResults([]);
     notify(`"${articulo.nombre}" agregado`, 'success');
+    // Solo se limpia la busqueda por texto: navegando por categoria (sin texto) el
+    // catalogo debe permanecer visible tras agregar, igual que en DemoPV.
+    if (query.trim()) {
+      setQuery('');
+      setResults([]);
+    }
     searchInputRef.current?.focus();
   }
 
@@ -319,11 +342,51 @@ export default function VentaPos() {
       <div className="lg:col-span-2 space-y-3">
         {!corteAbierto && (
           <div className="bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg px-4 py-3">
-            ⚠️ No hay corte de caja abierto. Ve a la pestana "Cortes de caja" para abrir uno antes de vender.
+            ⚠️ No hay corte de caja abierto. Debes <Link to="/cortes-caja" className="underline font-semibold">abrir un corte</Link> antes de poder registrar ventas.
           </div>
         )}
 
-        <div className="relative">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex gap-2 flex-wrap">
+            <button
+              type="button"
+              className={'px-3 py-1.5 rounded-full text-xs font-medium border ' + (!categoriaId ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')}
+              onClick={() => selectCategory('')}
+            >
+              Todas
+            </button>
+            {categorias.map((c) => (
+              <button
+                type="button"
+                key={c.id}
+                className={'px-3 py-1.5 rounded-full text-xs font-medium border ' + (String(categoriaId) === String(c.id) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')}
+                onClick={() => selectCategory(c.id)}
+              >
+                {c.nombre}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1 bg-gray-100 rounded-full p-1 shrink-0">
+            <button
+              type="button"
+              title="Vista de lista"
+              className={'px-3 py-1 rounded-full text-xs font-medium transition-colors ' + (viewMode === 'list' ? 'bg-white text-brand-700 shadow-sm' : 'text-gray-500 hover:text-gray-700')}
+              onClick={() => changeViewMode('list')}
+            >
+              📋 Lista
+            </button>
+            <button
+              type="button"
+              title="Vista con imagenes"
+              className={'px-3 py-1 rounded-full text-xs font-medium transition-colors ' + (viewMode === 'images' ? 'bg-white text-brand-700 shadow-sm' : 'text-gray-500 hover:text-gray-700')}
+              onClick={() => changeViewMode('images')}
+            >
+              🖼️ Imagenes
+            </button>
+          </div>
+        </div>
+
+        <div>
           <input
             ref={searchInputRef}
             className="input"
@@ -333,19 +396,51 @@ export default function VentaPos() {
             onKeyDown={handleSearchKeyDown}
           />
           {results.length > 0 && (
-            <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-              {results.map((r, idx) => (
-                <button
-                  type="button"
-                  key={r.id}
-                  className={'flex justify-between w-full text-left px-3 py-2 text-sm ' + (idx === highlighted ? 'bg-brand-50 text-brand-700' : 'hover:bg-gray-50')}
-                  onClick={() => addToCart(r)}
-                >
-                  <span>{r.nombre}</span>
-                  <span className="text-gray-400">${Number(r.precioVenta || 0).toFixed(2)} · stock {r.stock}</span>
-                </button>
-              ))}
-            </div>
+            viewMode === 'images' ? (
+              <div className="bg-white border border-gray-200 rounded-lg shadow-sm mt-1 max-h-[32rem] overflow-y-auto p-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {results.map((r) => (
+                    <button
+                      type="button"
+                      key={r.id}
+                      className="flex flex-col text-left rounded-xl border border-gray-200 hover:border-brand-300 hover:shadow-md transition-all overflow-hidden bg-white"
+                      onClick={() => addToCart(r)}
+                    >
+                      <div className="aspect-square bg-gray-50 flex items-center justify-center overflow-hidden">
+                        {r.imagenUrl ? (
+                          <img src={r.imagenUrl} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-3xl text-gray-300">🖼️</span>
+                        )}
+                      </div>
+                      <div className="p-2.5">
+                        <p className="font-medium text-gray-900 text-sm leading-snug line-clamp-2">{r.nombre}</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="font-bold text-brand-700 text-sm">${Number(r.precioVenta || 0).toFixed(2)}</span>
+                          <span className={'text-xs ' + (r.stock <= r.stockMinimo ? 'text-red-500' : 'text-gray-400')}>
+                            Disp: {r.stock}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-lg shadow-sm mt-1 max-h-80 overflow-y-auto">
+                {results.map((r, idx) => (
+                  <button
+                    type="button"
+                    key={r.id}
+                    className={'flex justify-between w-full text-left px-3 py-2 text-sm ' + (idx === highlighted ? 'bg-brand-50 text-brand-700' : 'hover:bg-gray-50')}
+                    onClick={() => addToCart(r)}
+                  >
+                    <span>{r.nombre}</span>
+                    <span className="text-gray-400">${Number(r.precioVenta || 0).toFixed(2)} · stock {r.stock}</span>
+                  </button>
+                ))}
+              </div>
+            )
           )}
         </div>
 
@@ -408,35 +503,6 @@ export default function VentaPos() {
 
       <div className="card h-fit sticky top-4 space-y-3">
         <h3 className="font-semibold text-gray-700">Resumen</h3>
-        <div className="text-sm space-y-1">
-          <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>${subtotal.toFixed(2)}</span></div>
-          <div className="flex justify-between text-lg font-bold text-gray-800"><span>Total</span><span>${subtotal.toFixed(2)}</span></div>
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Metodo de pago</label>
-          <select className="input" value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
-            {METODOS_PAGO.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-          </select>
-        </div>
-
-        {metodoPago === 'EFECTIVO' && (
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Monto recibido</label>
-            <input type="number" step="0.01" className="input" value={montoRecibido} onChange={(e) => setMontoRecibido(e.target.value)} />
-            {montoRecibido !== '' && (
-              <p className={'text-xs mt-1 ' + (cambio < 0 ? 'text-red-600' : 'text-emerald-600')}>
-                {cambio < 0 ? `Falta por cobrar: $${Math.abs(cambio).toFixed(2)}` : `Cambio a entregar: $${cambio.toFixed(2)}`}
-              </p>
-            )}
-          </div>
-        )}
-
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Cliente (opcional)</label>
-          <input className="input mb-2" placeholder="Nombre" value={clienteNombre} onChange={(e) => setClienteNombre(e.target.value)} />
-          <input className="input" placeholder="Correo" value={clienteEmail} onChange={(e) => setClienteEmail(e.target.value)} />
-        </div>
 
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Ticket</label>
@@ -452,6 +518,40 @@ export default function VentaPos() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Cliente (opcional)</label>
+          <input className="input" placeholder="Nombre del cliente" value={clienteNombre} onChange={(e) => setClienteNombre(e.target.value)} />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Correo para enviar el ticket (opcional)</label>
+          <input className="input" placeholder="cliente@correo.com" value={clienteEmail} onChange={(e) => setClienteEmail(e.target.value)} />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Metodo de pago</label>
+          <select className="input" value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
+            {METODOS_PAGO.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </div>
+
+        {metodoPago === 'EFECTIVO' && (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">¿Con cuanto paga el cliente?</label>
+            <input type="number" step="0.01" className="input" value={montoRecibido} onChange={(e) => setMontoRecibido(e.target.value)} />
+            {montoRecibido !== '' && (
+              <p className={'text-xs mt-1 ' + (cambio < 0 ? 'text-red-600' : 'text-emerald-600')}>
+                {cambio < 0 ? `Falta por cobrar: $${Math.abs(cambio).toFixed(2)}` : `Cambio a entregar: $${cambio.toFixed(2)}`}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="border-t border-gray-100 pt-3 text-sm space-y-1">
+          <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>${subtotal.toFixed(2)}</span></div>
+          <div className="flex justify-between text-lg font-bold text-gray-800"><span>Total</span><span>${subtotal.toFixed(2)}</span></div>
         </div>
 
         <button className="btn-primary w-full" disabled={loading || !corteAbierto} onClick={handleCheckout}>

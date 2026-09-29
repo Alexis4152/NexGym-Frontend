@@ -5,41 +5,25 @@ import * as inventarioApi from '../api/inventario';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
 
-const emptyProveedor = { nombre: '', contacto: '', telefono: '', email: '', notas: '' };
 const emptyItem = { articuloId: '', descripcion: '', cantidad: 1, costoUnitario: '' };
 
 export default function Compras() {
-  const [tab, setTab] = useState('compras');
   const [proveedores, setProveedores] = useState([]);
   const [compras, setCompras] = useState([]);
   const [articulos, setArticulos] = useState([]);
-  const [modalProveedor, setModalProveedor] = useState(false);
-  const [proveedorForm, setProveedorForm] = useState(emptyProveedor);
   const [modalCompra, setModalCompra] = useState(false);
   const [compraForm, setCompraForm] = useState({ proveedorId: '', fechaPlaneada: '', notas: '' });
   const [items, setItems] = useState([{ ...emptyItem }]);
   const { notify } = useNotify();
 
   useEffect(() => {
-    loadProveedores();
+    proveedoresApi.listProveedores(0, 100).then(({ data }) => setProveedores(data.data.content));
     loadCompras();
     inventarioApi.listArticulos('', 0, 200).then(({ data }) => setArticulos(data.data.content));
   }, []);
 
-  function loadProveedores() {
-    proveedoresApi.listProveedores(0, 100).then(({ data }) => setProveedores(data.data.content));
-  }
   function loadCompras() {
     comprasApi.listCompras(0, 50).then(({ data }) => setCompras(data.data.content));
-  }
-
-  async function handleCrearProveedor(e) {
-    e.preventDefault();
-    await proveedoresApi.createProveedor(proveedorForm);
-    notify('Proveedor creado', 'success');
-    setModalProveedor(false);
-    setProveedorForm(emptyProveedor);
-    loadProveedores();
   }
 
   function updateItem(i, patch) {
@@ -82,20 +66,11 @@ export default function Compras() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-gray-800">Compras y proveedores</h1>
-        <div className="flex gap-2">
-          <button className="btn-secondary" onClick={() => setModalProveedor(true)}>+ Proveedor</button>
-          <button className="btn-primary" onClick={() => setModalCompra(true)}>+ Compra</button>
-        </div>
+        <h1 className="text-xl font-bold text-gray-800">Compras</h1>
+        <button className="btn-primary" onClick={() => setModalCompra(true)}>+ Compra</button>
       </div>
 
-      <div className="flex gap-4 border-b border-gray-200 mb-4 text-sm">
-        <button className={'pb-2 ' + (tab === 'compras' ? 'border-b-2 border-brand-600 text-brand-700 font-medium' : 'text-gray-500')} onClick={() => setTab('compras')}>Compras</button>
-        <button className={'pb-2 ' + (tab === 'proveedores' ? 'border-b-2 border-brand-600 text-brand-700 font-medium' : 'text-gray-500')} onClick={() => setTab('proveedores')}>Proveedores</button>
-      </div>
-
-      {tab === 'compras' && (
-        <div className="card overflow-x-auto">
+      <div className="card overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b border-gray-100">
@@ -126,46 +101,6 @@ export default function Compras() {
             </tbody>
           </table>
         </div>
-      )}
-
-      {tab === 'proveedores' && (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {proveedores.map((p) => (
-            <div key={p.id} className="card">
-              <h3 className="font-semibold text-gray-800">{p.nombre}</h3>
-              <p className="text-xs text-gray-500">{p.contacto}</p>
-              <p className="text-xs text-gray-500">{p.telefono || p.email}</p>
-            </div>
-          ))}
-          {proveedores.length === 0 && <p className="text-sm text-gray-500">Aun no hay proveedores.</p>}
-        </div>
-      )}
-
-      {modalProveedor && (
-        <Modal title="Nuevo proveedor" onClose={() => setModalProveedor(false)}>
-          <form onSubmit={handleCrearProveedor} className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
-              <input className="input" value={proveedorForm.nombre} onChange={(e) => setProveedorForm({ ...proveedorForm, nombre: e.target.value })} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Contacto</label>
-              <input className="input" value={proveedorForm.contacto} onChange={(e) => setProveedorForm({ ...proveedorForm, contacto: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Telefono</label>
-                <input className="input" value={proveedorForm.telefono} onChange={(e) => setProveedorForm({ ...proveedorForm, telefono: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Correo</label>
-                <input className="input" value={proveedorForm.email} onChange={(e) => setProveedorForm({ ...proveedorForm, email: e.target.value })} />
-              </div>
-            </div>
-            <button className="btn-primary w-full mt-2">Crear proveedor</button>
-          </form>
-        </Modal>
-      )}
 
       {modalCompra && (
         <Modal title="Nueva compra" onClose={() => setModalCompra(false)} wide>

@@ -9,7 +9,7 @@ export default function SelectCentro() {
   const [centros, setCentros] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
   const [nombre, setNombre] = useState('');
-  const { selectCentro } = useAuth();
+  const { selectCentro, isSuperAdmin } = useAuth();
   const { notify } = useNotify();
   const navigate = useNavigate();
 
@@ -18,7 +18,9 @@ export default function SelectCentro() {
   }, []);
 
   function load() {
-    centrosApi.listCentros().then(({ data }) => setCentros(data.data));
+    // SUPER_ADMIN ve todos los centros de la plataforma; un Supervisor multi-centro
+    // ve solo su centro "hogar" + los adicionales que se le hayan asignado.
+    centrosApi.listCentrosDisponibles().then(({ data }) => setCentros(data.data));
   }
 
   function handleSelect(id) {
@@ -47,9 +49,11 @@ export default function SelectCentro() {
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-bold text-gray-800">Selecciona un centro deportivo</h1>
-          <button className="btn-primary" onClick={() => setShowCreate(true)}>
-            + Nuevo centro
-          </button>
+          {isSuperAdmin && (
+            <button className="btn-primary" onClick={() => setShowCreate(true)}>
+              + Nuevo centro
+            </button>
+          )}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {centros.map((c) => (

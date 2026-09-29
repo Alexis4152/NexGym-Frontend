@@ -2,13 +2,17 @@ import { useEffect, useState } from 'react';
 import * as cortesCajaApi from '../api/cortesCaja';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
+import Pagination from '../components/Pagination.jsx';
 
 const ESTADO_COLOR = { ABIERTO: 'bg-emerald-100 text-emerald-700', CERRADO: 'bg-gray-100 text-gray-600' };
+const emptyFiltros = { desde: '', hasta: '', estado: '', usuarioId: '' };
 
 export default function CortesCaja() {
   const [corteAbierto, setCorteAbierto] = useState(null);
   const [historial, setHistorial] = useState({ content: [], totalPages: 0 });
   const [page, setPage] = useState(0);
+  const [filtros, setFiltros] = useState(emptyFiltros);
+  const [cajeros, setCajeros] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalAbrir, setModalAbrir] = useState(false);
   const [montoInicial, setMontoInicial] = useState('');
@@ -19,18 +23,28 @@ export default function CortesCaja() {
   const [notasCierre, setNotasCierre] = useState('');
   const [modalDetalle, setModalDetalle] = useState(null);
   const { notify, confirmDialog } = useNotify();
+  const hayFiltros = Object.values(filtros).some(Boolean);
 
-  useEffect(() => { cargarTodo(); }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    cortesCajaApi.listCajeros().then(({ data }) => setCajeros(data.data));
+  }, []);
+
+  useEffect(() => { cargarTodo(); }, [page, filtros]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function cargarTodo() {
     setLoading(true);
     Promise.all([
       cortesCajaApi.getCorteAbierto(),
-      cortesCajaApi.listCortesCaja(page, 20),
+      cortesCajaApi.listCortesCaja(filtros, page, 20),
     ]).then(([abierto, lista]) => {
       setCorteAbierto(abierto.data.data);
       setHistorial(lista.data.data);
     }).finally(() => setLoading(false));
+  }
+
+  function actualizarFiltro(campo, valor) {
+    setPage(0);
+    setFiltros((f) => ({ ...f, [campo]: valor }));
   }
 
   async function handleAbrir(e) {
@@ -100,6 +114,38 @@ export default function CortesCaja() {
       )}
 
       <h2 className="font-semibold text-gray-800 mb-3">Historial</h2>
+
+      <div className="card mb-4 flex flex-wrap gap-3 items-end">
+        <div className="w-36">
+          <label className="text-xs font-medium text-gray-600 block mb-1">Desde</label>
+          <input type="date" className="input" value={filtros.desde} onChange={(e) => actualizarFiltro('desde', e.target.value)} />
+        </div>
+        <div className="w-36">
+          <label className="text-xs font-medium text-gray-600 block mb-1">Hasta</label>
+          <input type="date" className="input" value={filtros.hasta} onChange={(e) => actualizarFiltro('hasta', e.target.value)} />
+        </div>
+        <div className="w-40">
+          <label className="text-xs font-medium text-gray-600 block mb-1">Estado</label>
+          <select className="input" value={filtros.estado} onChange={(e) => actualizarFiltro('estado', e.target.value)}>
+            <option value="">Todos</option>
+            <option value="ABIERTO">Abierto</option>
+            <option value="CERRADO">Cerrado</option>
+          </select>
+        </div>
+        <div className="w-48">
+          <label className="text-xs font-medium text-gray-600 block mb-1">Cajero</label>
+          <select className="input" value={filtros.usuarioId} onChange={(e) => actualizarFiltro('usuarioId', e.target.value)}>
+            <option value="">Todos</option>
+            {cajeros.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </select>
+        </div>
+        {hayFiltros && (
+          <button type="button" className="btn-secondary text-sm" onClick={() => { setPage(0); setFiltros(emptyFiltros); }}>
+            Limpiar filtros
+          </button>
+        )}
+      </div>
+
       <div className="card overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -107,7 +153,9 @@ export default function CortesCaja() {
               <th className="py-2">Cajero</th>
               <th>Abierto</th>
               <th>Cerrado</th>
+              <th>Cerrado por</th>
               <th>Ventas</th>
+              <th>Transac.</th>
               <th>Estado</th>
               <th></th>
             </tr>
@@ -118,7 +166,9 @@ export default function CortesCaja() {
                 <td className="py-2 font-medium text-gray-800">{c.usuarioNombre}</td>
                 <td className="text-gray-600">{new Date(c.abiertoEn).toLocaleString()}</td>
                 <td className="text-gray-600">{c.cerradoEn ? new Date(c.cerradoEn).toLocaleString() : '-'}</td>
-                <td className="text-gray-600">${Number(c.totalVentas).toFixed(2)} ({c.totalTransacciones})</td>
+                <td className="text-gray-600">{c.cerradoPorNombre || '-'}</td>
+                <td className="text-gray-600">${Number(c.totalVentas).toFixed(2)}</td>
+                <td className="text-gray-600">{c.totalTransacciones}</td>
                 <td><span className={'px-2 py-0.5 rounded-full text-xs ' + ESTADO_COLOR[c.estado]}>{c.estado}</span></td>
                 <td className="text-right">
                   <button className="text-brand-600 hover:underline" onClick={() => verDetalle(c)}>Ver</button>
@@ -126,10 +176,11 @@ export default function CortesCaja() {
               </tr>
             ))}
             {historial.content.length === 0 && (
-              <tr><td colSpan={6} className="py-6 text-center text-gray-400">Sin cortes registrados</td></tr>
+              <tr><td colSpan={8} className="py-6 text-center text-gray-400">Sin cortes registrados</td></tr>
             )}
           </tbody>
         </table>
+        <Pagination page={page} totalPages={historial.totalPages} onChange={setPage} />
       </div>
 
       {modalAbrir && (

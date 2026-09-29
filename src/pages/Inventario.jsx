@@ -15,6 +15,9 @@ export default function Inventario() {
   const [pageData, setPageData] = useState({ content: [], totalPages: 0 });
   const [page, setPage] = useState(0);
   const [q, setQ] = useState('');
+  const [categoriaFiltro, setCategoriaFiltro] = useState('');
+  const [soloStockBajo, setSoloStockBajo] = useState(false);
+  const [scanCode, setScanCode] = useState('');
   const [categorias, setCategorias] = useState([]);
   const [disciplinas, setDisciplinas] = useState([]);
   const [modal, setModal] = useState(null);
@@ -36,10 +39,27 @@ export default function Inventario() {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, page]);
+  }, [q, page, categoriaFiltro, soloStockBajo]);
 
   function load() {
-    inventarioApi.listArticulos(q, page, 20).then(({ data }) => setPageData(data.data));
+    inventarioApi.listArticulos(q, page, 20, categoriaFiltro, soloStockBajo).then(({ data }) => setPageData(data.data));
+  }
+
+  async function handleScan(e) {
+    if (e.key !== 'Enter' || !scanCode.trim()) return;
+    try {
+      const { data } = await inventarioApi.buscarArticuloPorCodigoBarras(scanCode.trim());
+      if (data.data) {
+        openEdit(data.data);
+        notify(`Articulo encontrado: ${data.data.nombre}`, 'success');
+      } else {
+        notify('Ningun articulo tiene ese codigo de barras', 'error');
+      }
+    } catch {
+      notify('Ningun articulo tiene ese codigo de barras', 'error');
+    } finally {
+      setScanCode('');
+    }
   }
   function loadCategorias() {
     inventarioApi.listCategoriasInventario().then(({ data }) => setCategorias(data.data));
@@ -167,7 +187,38 @@ export default function Inventario() {
         <button className="btn-primary" onClick={openCreate}>+ Nuevo articulo</button>
       </div>
 
-      <input className="input max-w-xs mb-4" placeholder="Buscar articulo..." value={q} onChange={(e) => { setPage(0); setQ(e.target.value); }} />
+      <div className="relative mb-4 max-w-md">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">📷</span>
+        <input
+          className="input pl-9"
+          placeholder="Escanear codigo de barras (busca y abre el articulo)"
+          value={scanCode}
+          onChange={(e) => setScanCode(e.target.value)}
+          onKeyDown={handleScan}
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-3 mb-4 items-center">
+        <input className="input flex-1 min-w-[220px]" placeholder="Buscar por nombre o codigo..." value={q}
+          onChange={(e) => { setPage(0); setQ(e.target.value); }} />
+        <select className="input w-52" value={categoriaFiltro} onChange={(e) => { setPage(0); setCategoriaFiltro(e.target.value); }}>
+          <option value="">Todas las categorias</option>
+          {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        </select>
+        <button
+          type="button"
+          className={'px-3 py-2 rounded-lg text-sm font-medium border transition-colors ' +
+            (soloStockBajo ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50')}
+          onClick={() => { setPage(0); setSoloStockBajo((v) => !v); }}
+        >
+          ⚠️ Stock bajo
+        </button>
+        {(q || categoriaFiltro || soloStockBajo) && (
+          <button type="button" className="btn-secondary text-sm" onClick={() => { setPage(0); setQ(''); setCategoriaFiltro(''); setSoloStockBajo(false); }}>
+            Limpiar filtros
+          </button>
+        )}
+      </div>
 
       <div className="card overflow-x-auto">
         <table className="w-full text-sm">

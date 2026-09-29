@@ -5,6 +5,11 @@ export const listInstructores = (q = '', page = 0, size = 20) =>
 export const createInstructor = (data) => api.post('/instructores', data);
 export const updateInstructor = (id, data) => api.put(`/instructores/${id}`, data);
 export const deactivateInstructor = (id) => api.delete(`/instructores/${id}`);
+export const subirFotoInstructor = (id, file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api.post(`/instructores/${id}/foto`, formData);
+};
 
 export const listDocumentosInstructor = (id) => api.get(`/instructores/${id}/documentos`);
 export const subirDocumentoInstructor = (id, disciplinaId, file) => {

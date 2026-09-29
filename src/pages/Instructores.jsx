@@ -1,28 +1,32 @@
 import { useEffect, useState } from 'react';
 import * as instructoresApi from '../api/instructores';
 import * as disciplinasApi from '../api/disciplinas';
+import * as sucursalesApi from '../api/sucursales';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
 import PhoneInput from '../components/PhoneInput.jsx';
 
-const emptyForm = { nombre: '', telefono: '', email: '', especialidad: '', disciplinaIds: [] };
+const emptyForm = { nombre: '', telefono: '', email: '', especialidad: '', disciplinaIds: [], sucursalIds: [], fotoUrl: null };
 
 export default function Instructores() {
   const [pageData, setPageData] = useState({ content: [], totalPages: 0 });
   const [page, setPage] = useState(0);
   const [q, setQ] = useState('');
   const [disciplinas, setDisciplinas] = useState([]);
+  const [sucursales, setSucursales] = useState([]);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState({});
   const [documentos, setDocumentos] = useState([]);
   const [subiendoDocumento, setSubiendoDocumento] = useState(false);
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
   const [disciplinaDocumento, setDisciplinaDocumento] = useState('');
   const { notify, confirmDialog } = useNotify();
 
   useEffect(() => {
     disciplinasApi.listDisciplinasActivas().then(({ data }) => setDisciplinas(data.data));
+    sucursalesApi.listSucursalesActivas().then(({ data }) => setSucursales(data.data));
   }, []);
 
   useEffect(() => {
@@ -48,17 +52,43 @@ export default function Instructores() {
   }
 
   function openEdit(i) {
-    setForm({ nombre: i.nombre, telefono: i.telefono || '', email: i.email || '', especialidad: i.especialidad || '', disciplinaIds: i.disciplinaIds || [] });
+    setForm({
+      nombre: i.nombre, telefono: i.telefono || '', email: i.email || '', especialidad: i.especialidad || '',
+      disciplinaIds: i.disciplinaIds || [], sucursalIds: i.sucursalIds || [], fotoUrl: i.fotoUrl || null,
+    });
     setErrors({});
     setDisciplinaDocumento('');
     loadDocumentos(i.id);
     setModal({ editing: i.id });
   }
 
+  async function handleSubirFoto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSubiendoFoto(true);
+    try {
+      const { data } = await instructoresApi.subirFotoInstructor(modal.editing, file);
+      setForm((f) => ({ ...f, fotoUrl: data.data.fotoUrl }));
+      load();
+    } catch (err) {
+      notify(err.response?.data?.message || 'No se pudo subir la foto', 'error');
+    } finally {
+      setSubiendoFoto(false);
+      e.target.value = '';
+    }
+  }
+
   function toggleDisciplina(id) {
     setForm((f) => ({
       ...f,
       disciplinaIds: f.disciplinaIds.includes(id) ? f.disciplinaIds.filter((x) => x !== id) : [...f.disciplinaIds, id],
+    }));
+  }
+
+  function toggleSucursal(id) {
+    setForm((f) => ({
+      ...f,
+      sucursalIds: f.sucursalIds.includes(id) ? f.sucursalIds.filter((x) => x !== id) : [...f.sucursalIds, id],
     }));
   }
 
@@ -141,6 +171,7 @@ export default function Instructores() {
             <tr className="text-left text-gray-500 border-b border-gray-100">
               <th className="py-2">Nombre</th>
               <th>Disciplinas</th>
+              {sucursales.length > 1 && <th>Sucursales</th>}
               <th>Contacto</th>
               <th></th>
             </tr>
@@ -150,6 +181,7 @@ export default function Instructores() {
               <tr key={i.id} className={'border-b border-gray-50 ' + (!i.activo ? 'opacity-50' : '')}>
                 <td className="py-2 font-medium text-gray-800">{i.nombre}</td>
                 <td className="text-gray-600">{i.disciplinaNombres?.join(', ') || '-'}</td>
+                {sucursales.length > 1 && <td className="text-gray-500">{i.sucursalNombres?.join(', ') || 'Todas'}</td>}
                 <td className="text-gray-600">{i.telefono || i.email || '-'}</td>
                 <td className="text-right space-x-2">
                   <button className="text-brand-600 hover:underline" onClick={() => openEdit(i)}>
@@ -165,7 +197,7 @@ export default function Instructores() {
             ))}
             {pageData.content.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-6 text-center text-gray-400">
+                <td colSpan={sucursales.length > 1 ? 5 : 4} className="py-6 text-center text-gray-400">
                   Sin resultados
                 </td>
               </tr>
@@ -178,6 +210,19 @@ export default function Instructores() {
       {modal && (
         <Modal title={modal.editing ? 'Editar instructor' : 'Nuevo instructor'} onClose={() => setModal(null)}>
           <form onSubmit={handleSubmit} className="space-y-3">
+            {modal.editing && (
+              <div className="flex items-center gap-3">
+                {form.fotoUrl ? (
+                  <img src={form.fotoUrl} alt="" className="w-14 h-14 rounded-full object-cover border border-gray-200" />
+                ) : (
+                  <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-xl">🏋️</div>
+                )}
+                <label className="btn-secondary text-xs cursor-pointer">
+                  {subiendoFoto ? 'Subiendo...' : 'Cambiar foto'}
+                  <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleSubirFoto} disabled={subiendoFoto} />
+                </label>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
               <input className="input" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
@@ -216,6 +261,29 @@ export default function Instructores() {
               </div>
               {errors.disciplinaIds && <p className="text-xs text-red-600 mt-1">{errors.disciplinaIds}</p>}
             </div>
+            {sucursales.length > 1 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Sucursales donde da clases</label>
+                <div className="flex flex-wrap gap-2">
+                  {sucursales.map((s) => (
+                    <button
+                      type="button"
+                      key={s.id}
+                      onClick={() => toggleSucursal(s.id)}
+                      className={
+                        'px-3 py-1 rounded-full text-xs border ' +
+                        (form.sucursalIds.includes(s.id)
+                          ? 'bg-brand-600 text-white border-brand-600'
+                          : 'bg-white text-gray-600 border-gray-300')
+                      }
+                    >
+                      {s.nombre}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Sin seleccionar ninguna, este instructor esta disponible en todas.</p>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Diplomas / Titulos</label>
               {modal.editing ? (

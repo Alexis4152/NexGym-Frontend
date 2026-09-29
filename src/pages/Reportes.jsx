@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
@@ -54,20 +55,31 @@ const PRESETS = [
   { value: 'personalizado', label: 'Personalizado' },
 ];
 
-const TABS = [
-  { id: 'resumen', label: 'Resumen' },
-  { id: 'finanzas', label: 'Finanzas' },
-  { id: 'tienda', label: 'Tienda' },
-  { id: 'membresias', label: 'Membresías' },
-  { id: 'alumnos', label: 'Alumnos' },
-  { id: 'operacion', label: 'Operación' },
-];
+// Cada reporte ahora es un destino de navegacion independiente (ver
+// src/config/sections.js -> grupo "Reportes"), no una pestaña horizontal. El
+// sub-tipo se deriva de la URL (/reportes, /reportes/finanzas, ...).
+const RUTA_A_TAB = {
+  '': 'resumen',
+  finanzas: 'finanzas',
+  tienda: 'tienda',
+  membresias: 'membresias',
+  alumnos: 'alumnos',
+  operacion: 'operacion',
+};
+const TITULO_TAB = {
+  resumen: 'Resumen general',
+  finanzas: 'Finanzas',
+  tienda: 'Tienda',
+  membresias: 'Membresías',
+  alumnos: 'Alumnos',
+  operacion: 'Operación',
+};
 
 function Card({ label, value, sub, onClick, tone }) {
   return (
     <div className={'card ' + (onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : '')} onClick={onClick}>
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={'text-xl font-bold mt-1 ' + (tone || 'text-gray-800')}>{value}</p>
+      <p className="text-sm text-gray-500">{label}</p>
+      <p className={'text-2xl font-bold mt-1 ' + (tone || 'text-gray-800')}>{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
     </div>
   );
@@ -89,10 +101,15 @@ function Tabla({ headers, rows, empty }) {
 
 export default function Reportes() {
   const { notify } = useNotify();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [preset, setPreset] = useState('mes');
   const [rango, setRango] = useState(() => presetRango('mes'));
-  const [tab, setTab] = useState('resumen');
   const [generandoPdf, setGenerandoPdf] = useState(false);
+
+  const sub = location.pathname.replace(/^\/reportes\/?/, '');
+  const tab = RUTA_A_TAB[sub] || 'resumen';
+  const irA = (t) => navigate(t === 'resumen' ? '/reportes' : `/reportes/${t}`);
 
   const from = toISO(rango[0]);
   const to = toISO(rango[1]);
@@ -117,14 +134,9 @@ export default function Reportes() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <h1 className="text-xl font-bold text-gray-800">Reportes</h1>
-        <button className="btn-primary text-sm" onClick={handleDescargarPdf} disabled={generandoPdf}>
-          📄 {generandoPdf ? 'Generando...' : 'Descargar PDF'}
-        </button>
-      </div>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">Reportes · {TITULO_TAB[tab]}</h1>
 
-      <div className="flex flex-wrap items-end gap-3 mb-4">
+      <div className="flex flex-wrap items-end gap-3 mb-6">
         <div>
           <label className="text-xs font-medium text-gray-600 block mb-1">Periodo</label>
           <select className="input" value={preset} onChange={(e) => cambiarPreset(e.target.value)}>
@@ -144,18 +156,12 @@ export default function Reportes() {
           </>
         )}
         <p className="text-xs text-gray-400 pb-2">{from} — {to}</p>
+        <button className="btn-primary" onClick={handleDescargarPdf} disabled={generandoPdf}>
+          📄 {generandoPdf ? 'Generando...' : 'Generar reporte PDF'}
+        </button>
       </div>
 
-      <div className="flex gap-4 border-b border-gray-200 mb-4 text-sm overflow-x-auto">
-        {TABS.map((t) => (
-          <button key={t.id} className={'pb-2 whitespace-nowrap ' + (tab === t.id ? 'border-b-2 border-brand-600 text-brand-700 font-medium' : 'text-gray-500')}
-                  onClick={() => setTab(t.id)}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'resumen' && <TabResumen from={from} to={to} irA={setTab} />}
+      {tab === 'resumen' && <TabResumen from={from} to={to} irA={irA} />}
       {tab === 'finanzas' && <TabFinanzas from={from} to={to} />}
       {tab === 'tienda' && <TabTienda from={from} to={to} />}
       {tab === 'membresias' && <TabMembresias from={from} to={to} />}
@@ -172,6 +178,7 @@ function TabResumen({ from, to, irA }) {
   const [alumnos, setAlumnos] = useState(null);
   const [cartera, setCartera] = useState(null);
   const [finComp, setFinComp] = useState(null);
+  const [porDia, setPorDia] = useState([]);
 
   useEffect(() => {
     reportesApi.finanzasResumen(from, to).then(({ data }) => setFin(data.data));
@@ -179,16 +186,36 @@ function TabResumen({ from, to, irA }) {
     reportesApi.tiendaResumen(from, to).then(({ data }) => setTienda(data.data));
     reportesApi.alumnosResumen(from, to).then(({ data }) => setAlumnos(data.data));
     reportesApi.cartera().then(({ data }) => setCartera(data.data));
+    reportesApi.tiendaPorDia(from, to).then(({ data }) => setPorDia(data.data.map((d) => ({ fecha: d.fecha.slice(5), total: Number(d.total) }))));
   }, [from, to]);
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      <Card label="Ingresos" value={fin ? fmt(fin.ingresos) : '...'} sub={finComp ? pct(finComp.cambioPorcentual) + ' vs. periodo anterior' : null}
-            tone="text-emerald-600" onClick={() => irA('finanzas')} />
-      <Card label="Ventas Tienda" value={tienda ? fmt(tienda.totalVentas) : '...'} sub={tienda ? `${tienda.numeroVentas} ventas` : null} onClick={() => irA('tienda')} />
-      <Card label="Alumnos activos" value={alumnos ? alumnos.activos : '...'} sub={alumnos ? `+${alumnos.nuevos} nuevos en el periodo` : null} onClick={() => irA('alumnos')} />
-      <Card label="Por cobrar" value={cartera ? fmt(cartera.totalPorCobrar) : '...'} sub={cartera ? `${cartera.alumnosConSaldo} alumnos` : null}
-            tone="text-red-600" onClick={() => irA('finanzas')} />
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card label="Ingresos" value={fin ? fmt(fin.ingresos) : '...'} sub={finComp ? pct(finComp.cambioPorcentual) + ' vs. periodo anterior' : null}
+              tone="text-purple-700" onClick={() => irA('finanzas')} />
+        <Card label="Ventas Tienda" value={tienda ? fmt(tienda.totalVentas) : '...'} sub={tienda ? `${tienda.numeroVentas} ventas` : null}
+              tone="text-blue-600" onClick={() => irA('tienda')} />
+        <Card label="Alumnos activos" value={alumnos ? alumnos.activos : '...'} sub={alumnos ? `+${alumnos.nuevos} nuevos en el periodo` : null}
+              tone="text-green-600" onClick={() => irA('alumnos')} />
+        <Card label="Por cobrar" value={cartera ? fmt(cartera.totalPorCobrar) : '...'} sub={cartera ? `${cartera.alumnosConSaldo} alumnos` : null}
+              tone="text-red-600" onClick={() => irA('finanzas')} />
+      </div>
+
+      <div className="card">
+        <h3 className="font-semibold text-gray-800 mb-4">Ventas por día</h3>
+        {porDia.length > 0 ? (
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={porDia}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="fecha" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+              <Tooltip formatter={(v) => fmt(v)} />
+              <Bar dataKey="total" fill="rgb(var(--brand-600))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : <p className="text-gray-400 text-sm text-center py-8">Sin datos</p>}
+      </div>
     </div>
   );
 }
@@ -238,7 +265,7 @@ function TabFinanzas({ from, to }) {
 
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="card">
-          <h3 className="font-semibold text-gray-800 mb-3">Métodos de pago — Tienda</h3>
+          <h3 className="font-semibold text-gray-800 mb-3">💳 Métodos de pago — Tienda</h3>
           <Tabla headers={['Método', 'Ventas', 'Total']} rows={metodos?.tienda.map((r) => (
             <tr key={r.etiqueta} className="border-b border-gray-50">
               <td className="py-2 text-gray-700">{r.etiqueta}</td>
@@ -248,7 +275,7 @@ function TabFinanzas({ from, to }) {
           ))} />
         </div>
         <div className="card">
-          <h3 className="font-semibold text-gray-800 mb-3">Métodos de pago — Membresías</h3>
+          <h3 className="font-semibold text-gray-800 mb-3">💳 Métodos de pago — Membresías</h3>
           <Tabla headers={['Método', 'Pagos', 'Total']} rows={metodos?.membresias.map((r) => (
             <tr key={r.etiqueta} className="border-b border-gray-50">
               <td className="py-2 text-gray-700">{r.etiqueta}</td>
@@ -313,13 +340,13 @@ function TabTienda({ from, to }) {
         <h3 className="font-semibold text-gray-800 mb-4">Ventas por día</h3>
         {porDia.length > 0 ? (
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={porDia}>
+            <BarChart data={porDia}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="fecha" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={(v) => fmt(v)} />
-              <Line type="monotone" dataKey="total" stroke="#1c6690" strokeWidth={2} dot={false} />
-            </LineChart>
+              <Bar dataKey="total" fill="rgb(var(--brand-600))" radius={[4, 4, 0, 0]} />
+            </BarChart>
           </ResponsiveContainer>
         ) : <p className="text-sm text-gray-400 text-center py-8">Sin ventas en el periodo</p>}
       </div>
@@ -336,7 +363,7 @@ function TabTienda({ from, to }) {
           ))} />
         </div>
         <div className="card">
-          <h3 className="font-semibold text-gray-800 mb-1">Rentabilidad por producto</h3>
+          <h3 className="font-semibold text-gray-800 mb-1">💰 Rentabilidad por producto</h3>
           <p className="text-xs text-gray-400 mb-3">Usa el costo actual del artículo (no se conserva costo histórico por venta).</p>
           <Tabla headers={['Producto', 'Margen']} rows={margen.map((p) => (
             <tr key={p.articuloId} className="border-b border-gray-50">
@@ -510,7 +537,7 @@ function TabAlumnos({ from, to }) {
       )}
 
       <div className="card">
-        <h3 className="font-semibold text-gray-800 mb-1">Alumnos en riesgo de abandono</h3>
+        <h3 className="font-semibold text-gray-800 mb-1">⚠️ Alumnos en riesgo de abandono</h3>
         <p className="text-xs text-gray-400 mb-3">Membresía activa sin asistencia reciente (umbral configurable por centro).</p>
         <Tabla headers={['Alumno', 'Plan', 'Disciplinas', 'Última asistencia', 'Días sin asistir', 'Vence']} rows={riesgo.map((r) => (
           <tr key={r.alumnoId} className="border-b border-gray-50">
@@ -535,6 +562,7 @@ function TabOperacion({ from, to }) {
   const [ocupacion, setOcupacion] = useState([]);
   const [instructores, setInstructores] = useState([]);
   const [disciplinas, setDisciplinas] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
 
   useEffect(() => {
     sucursalesApi.listSucursalesActivas().then(({ data }) => setSucursales(data.data));
@@ -544,6 +572,7 @@ function TabOperacion({ from, to }) {
     reportesApi.operacionAsistencias(from, to).then(({ data }) => setAsistencias(data.data));
     reportesApi.operacionInstructores(from, to).then(({ data }) => setInstructores(data.data));
     reportesApi.operacionDisciplinas(from, to).then(({ data }) => setDisciplinas(data.data));
+    reportesApi.operacionUsuarios(from, to).then(({ data }) => setUsuarios(data.data));
   }, [from, to]);
 
   useEffect(() => {
@@ -620,6 +649,20 @@ function TabOperacion({ from, to }) {
             <td className="text-gray-500">{o.reservados}</td>
             <td className="text-gray-500">{o.asistieron}</td>
             <td className="font-semibold text-brand-700">{Number(o.porcentajeOcupacion).toFixed(1)}%</td>
+          </tr>
+        ))} />
+      </div>
+
+      <div className="card">
+        <h3 className="font-semibold text-gray-800 mb-1">🏆 Ranking de operación por usuario</h3>
+        <p className="text-xs text-gray-400 mb-3">Staff administrativo (recepción, cajeros): ventas y pagos que registró cada quien, no instructores.</p>
+        <Tabla headers={['Usuario', 'Ventas', 'Total ventas', 'Pagos', 'Total pagos']} rows={usuarios.map((u) => (
+          <tr key={u.usuarioId} className="border-b border-gray-50">
+            <td className="py-2 text-gray-800">{u.nombre}</td>
+            <td className="text-gray-600">{u.ventasRegistradas}</td>
+            <td className="font-semibold text-gray-800">{fmt(u.totalVentas)}</td>
+            <td className="text-gray-600">{u.pagosRegistrados}</td>
+            <td className="font-semibold text-gray-800">{fmt(u.totalPagos)}</td>
           </tr>
         ))} />
       </div>

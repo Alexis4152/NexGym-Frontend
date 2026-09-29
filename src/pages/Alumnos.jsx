@@ -10,7 +10,7 @@ import PhoneInput from '../components/PhoneInput.jsx';
 const emptyForm = {
   nombre: '', fechaNacimiento: '', telefono: '', email: '',
   contactoEmergenciaNombre: '', contactoEmergenciaTelefono: '', observaciones: '',
-  estado: 'ACTIVO', disciplinaIds: [],
+  estado: 'ACTIVO', disciplinaIds: [], fotoUrl: null,
 };
 
 const ESTADO_LABEL = { ACTIVO: 'Activo', INACTIVO: 'Inactivo', SUSPENDIDO: 'Suspendido' };
@@ -24,6 +24,7 @@ export default function Alumnos() {
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState({});
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
   const { notify, confirmDialog } = useNotify();
 
   useEffect(() => {
@@ -50,10 +51,26 @@ export default function Alumnos() {
     setForm({
       nombre: a.nombre, fechaNacimiento: a.fechaNacimiento || '', telefono: a.telefono || '', email: a.email || '',
       contactoEmergenciaNombre: a.contactoEmergenciaNombre || '', contactoEmergenciaTelefono: a.contactoEmergenciaTelefono || '',
-      observaciones: a.observaciones || '', estado: a.estado, disciplinaIds: a.disciplinaIds || [],
+      observaciones: a.observaciones || '', estado: a.estado, disciplinaIds: a.disciplinaIds || [], fotoUrl: a.fotoUrl || null,
     });
     setErrors({});
     setModal({ editing: a.id });
+  }
+
+  async function handleSubirFoto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSubiendoFoto(true);
+    try {
+      const { data } = await alumnosApi.subirFotoAlumno(modal.editing, file);
+      setForm((f) => ({ ...f, fotoUrl: data.data.fotoUrl }));
+      load();
+    } catch (err) {
+      notify(err.response?.data?.message || 'No se pudo subir la foto', 'error');
+    } finally {
+      setSubiendoFoto(false);
+      e.target.value = '';
+    }
   }
 
   function toggleDisciplina(id) {
@@ -155,6 +172,19 @@ export default function Alumnos() {
       {modal && (
         <Modal title={modal.editing ? 'Editar alumno' : 'Nuevo alumno'} onClose={() => setModal(null)} wide>
           <form onSubmit={handleSubmit} className="space-y-3">
+            {modal.editing && (
+              <div className="flex items-center gap-3">
+                {form.fotoUrl ? (
+                  <img src={form.fotoUrl} alt="" className="w-14 h-14 rounded-full object-cover border border-gray-200" />
+                ) : (
+                  <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-xl">🧑</div>
+                )}
+                <label className="btn-secondary text-xs cursor-pointer">
+                  {subiendoFoto ? 'Subiendo...' : 'Cambiar foto'}
+                  <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleSubirFoto} disabled={subiendoFoto} />
+                </label>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo</label>

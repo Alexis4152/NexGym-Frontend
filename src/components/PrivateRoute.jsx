@@ -2,7 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function PrivateRoute({ children, section, adminOnly, superAdminOnly }) {
-  const { user, loading, hasSection, isAdmin, isSuperAdmin, isPlatformActor, actingCentroId } = useAuth();
+  const { user, loading, hasSection, isAdmin, isSuperAdmin, isPlatformActor, actingCentroId, necesitaSeleccionarSucursal } = useAuth();
   const { pathname } = useLocation();
 
   if (loading) {
@@ -15,6 +15,11 @@ export default function PrivateRoute({ children, section, adminOnly, superAdminO
   }
   if (isPlatformActor && !user.centroId && !actingCentroId) {
     return pathname === '/select-centro' ? children : <Navigate to="/select-centro" replace />;
+  }
+  // Un ADMIN/OPERATIVO con varias sucursales autorizadas debe elegir la ACTIVA antes
+  // de entrar a cualquier otra pantalla (seccion 5/28 del encargo de sucursal activa).
+  if (necesitaSeleccionarSucursal) {
+    return pathname === '/select-sucursal' ? children : <Navigate to="/select-sucursal" replace />;
   }
 
   if (superAdminOnly && !isSuperAdmin) return <Navigate to="/" replace />;

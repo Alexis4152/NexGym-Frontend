@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as dashboardApi from '../api/dashboard';
+import { useAuth } from '../context/AuthContext.jsx';
 
 function money(n) {
   return (n ?? 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
@@ -8,12 +9,30 @@ function money(n) {
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
+  const { hasSection, hasPermiso } = useAuth();
 
   useEffect(() => {
     dashboardApi.getDashboard().then(({ data }) => setData(data.data));
   }, []);
 
   if (!data) return <p className="text-gray-400">Cargando panel...</p>;
+
+  // Accesos rapidos homologados con el patron de DemoPV (tarjetas grandes con emoji +
+  // titulo + subtitulo), solo se muestran los que el usuario realmente puede usar.
+  const accesos = [
+    hasSection('ALUMNOS') && hasPermiso('ALUMNOS_CREAR') &&
+      { to: '/alumnos', icon: '🧑', label: 'Nuevo alumno', sub: 'Registrar un alumno' },
+    hasSection('MEMBRESIAS') && hasPermiso('MEMBRESIAS_CREAR') &&
+      { to: '/membresias', icon: '🎫', label: 'Nueva membresia', sub: 'Asignar un plan' },
+    hasSection('TIENDA') && hasPermiso('VENTAS_CREAR') &&
+      { to: '/punto-venta', icon: '🛒', label: 'Nueva venta', sub: 'Ir al punto de venta' },
+    hasSection('INVENTARIO') &&
+      { to: '/inventario', icon: '📦', label: 'Inventario', sub: 'Gestionar articulos' },
+    hasSection('CAJA') &&
+      { to: '/caja', icon: '💰', label: 'Caja', sub: 'Movimientos e ingresos' },
+    hasSection('REPORTES') &&
+      { to: '/reportes', icon: '📈', label: 'Reportes', sub: 'Ver estadisticas' },
+  ].filter(Boolean);
 
   const cards = [
     { label: 'Ingresos del mes', value: money(data.ingresosMes), tone: 'text-emerald-600' },
@@ -37,6 +56,20 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {accesos.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {accesos.map((a) => (
+            <Link key={a.to} to={a.to} className="card hover:shadow-md transition-shadow flex items-center gap-4">
+              <span className="text-3xl">{a.icon}</span>
+              <div>
+                <p className="font-semibold text-gray-900">{a.label}</p>
+                <p className="text-sm text-gray-500">{a.sub}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="grid md:grid-cols-2 gap-6">
         <div className="card">

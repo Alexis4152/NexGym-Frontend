@@ -13,6 +13,16 @@
   --brand-700: 22 82 115;
   --brand-800: 16 61 86;
   --brand-900: 10 41 58;
+
+  /* Sidebar oscuro homologado con DemoPV (misma identidad de "familia visual" en la
+     navegacion principal, independiente del color de marca de cada centro). */
+  --brand-sidebar: #0b1220;
+  --brand-sidebar-border: #1c2740;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @layer components {
@@ -20,16 +30,19 @@
     @apply bg-brand-600 hover:bg-brand-700 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-secondary {
-    @apply bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-4 py-2 rounded-lg transition-colors;
+    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium px-4 py-2 rounded-lg border border-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-danger {
-    @apply bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg transition-colors;
+    @apply bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .input {
     @apply w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent;
   }
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-200 p-5;
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+  }
+  .badge {
+    @apply text-xs font-medium px-2 py-1 rounded-full;
   }
 }
 

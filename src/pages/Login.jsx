@@ -19,10 +19,14 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email.trim(), password.trim());
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Credenciales invalidas');
+      if (err.response) {
+        setError(err.response.data?.message || 'Credenciales invalidas');
+      } else {
+        setError('No se pudo conectar con el servidor. Verifica tu conexion e intenta de nuevo.');
+      }
     } finally {
       setLoading(false);
     }

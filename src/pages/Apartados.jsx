@@ -26,10 +26,14 @@ const TIPOS_TICKET = [
   { value: 'AMBOS', label: '🖨️📧 Ambos' },
 ];
 
+const emptyFiltros = { estado: '', desde: '', hasta: '', q: '' };
+
 export default function Apartados() {
-  const [estadoFiltro, setEstadoFiltro] = useState('');
-  const [pageData, setPageData] = useState({ content: [], totalPages: 0 });
+  const [filtros, setFiltros] = useState(emptyFiltros);
+  const [pageData, setPageData] = useState({ content: [], totalPages: 0, totalElements: 0 });
   const [page, setPage] = useState(0);
+  const [size, setSize] = useState(20);
+  const hayFiltros = Object.values(filtros).some(Boolean);
   const [modalDetalle, setModalDetalle] = useState(null);
   const [modalConfirmar, setModalConfirmar] = useState(null);
   const [horasVigencia, setHorasVigencia] = useState(24);
@@ -42,10 +46,24 @@ export default function Apartados() {
   const [motivo, setMotivo] = useState('');
   const { notify, confirmDialog } = useNotify();
 
-  useEffect(() => { load(); }, [estadoFiltro, page]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const t = setTimeout(load, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtros, page, size]);
 
   function load() {
-    apartadosApi.listApartados(estadoFiltro || undefined, page, 20).then(({ data }) => setPageData(data.data));
+    apartadosApi.listApartados(filtros, page, size).then(({ data }) => setPageData(data.data));
+  }
+
+  function cambiarSize(nuevoSize) {
+    setPage(0);
+    setSize(nuevoSize);
+  }
+
+  function actualizarFiltro(campo, valor) {
+    setPage(0);
+    setFiltros((f) => ({ ...f, [campo]: valor }));
   }
 
   async function verDetalle(a) {
@@ -137,12 +155,33 @@ export default function Apartados() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-gray-800">Apartados</h1>
-        <select className="input w-auto" value={estadoFiltro} onChange={(e) => { setPage(0); setEstadoFiltro(e.target.value); }}>
-          <option value="">Todos los estados</option>
-          {ESTADOS.map((e) => <option key={e} value={e}>{e}</option>)}
-        </select>
+      <h1 className="text-xl font-bold text-gray-800 mb-4">Apartados</h1>
+
+      <div className="flex flex-wrap gap-3 items-end mb-4">
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">Estado</label>
+          <select className="input" value={filtros.estado} onChange={(e) => actualizarFiltro('estado', e.target.value)}>
+            <option value="">Todos</option>
+            {ESTADOS.map((e) => <option key={e} value={e}>{e}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">Desde</label>
+          <input type="date" className="input" value={filtros.desde} onChange={(e) => actualizarFiltro('desde', e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">Hasta</label>
+          <input type="date" className="input" value={filtros.hasta} onChange={(e) => actualizarFiltro('hasta', e.target.value)} />
+        </div>
+        <div className="flex-1 min-w-[220px]">
+          <label className="text-xs font-medium text-gray-600 block mb-1">Cliente o producto</label>
+          <input className="input" placeholder="🔍 Buscar por nombre, telefono o producto..." value={filtros.q} onChange={(e) => actualizarFiltro('q', e.target.value)} />
+        </div>
+        {hayFiltros && (
+          <button type="button" className="btn-secondary text-sm" onClick={() => { setPage(0); setFiltros(emptyFiltros); }}>
+            Limpiar filtros
+          </button>
+        )}
       </div>
 
       <div className="card overflow-x-auto">
@@ -187,7 +226,11 @@ export default function Apartados() {
             )}
           </tbody>
         </table>
-        <Pagination page={page} totalPages={pageData.totalPages} onChange={setPage} />
+        <Pagination
+          page={page} totalPages={pageData.totalPages} onChange={setPage}
+          size={size} onSizeChange={cambiarSize} totalElements={pageData.totalElements}
+          pageSizes={[10, 20, 50]} countMode="total"
+        />
       </div>
 
       {modalDetalle && (
