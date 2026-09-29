@@ -98,6 +98,10 @@ export function AuthProvider({ children }) {
   // dueno de un solo centro nunca ve este selector, entra directo a su centro.
   const isPlatformActor = isSuperAdmin || (isSupervisor && !!user?.tieneVariosCentros);
   const isAdmin = isSupervisor || isSuperAdmin;
+  // Encargado de sucursal (nivel ADMIN) o superior -- espejo de TenantScope#isAdminOSuperior
+  // en el backend. Usado para gatear UI que solo Dueno/Encargado pueden operar, ej.
+  // aprobar/rechazar un egreso pendiente.
+  const isEncargadoOSuperior = isAdmin || user?.nivel === 'ADMIN';
   const hasSection = (code) => !!user?.secciones?.includes(code);
   const hasPermiso = (code) => !!user?.permisos?.includes(code);
   // Un ADMIN/OPERATIVO con EXACTAMENTE una sucursal autorizada la usa automaticamente
@@ -116,6 +120,7 @@ export function AuthProvider({ children }) {
     isAdmin,
     isSuperAdmin,
     isSupervisor,
+    isEncargadoOSuperior,
     isPlatformActor,
     hasSection,
     hasPermiso,

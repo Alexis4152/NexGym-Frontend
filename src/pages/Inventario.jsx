@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import * as inventarioApi from '../api/inventario';
 import * as disciplinasApi from '../api/disciplinas';
 import { useNotify } from '../context/NotifyContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
 
@@ -29,6 +30,10 @@ export default function Inventario() {
   const [ajusteRazon, setAjusteRazon] = useState('');
   const [nuevaCategoria, setNuevaCategoria] = useState('');
   const { notify, confirmDialog } = useNotify();
+  const { hasPermiso } = useAuth();
+  const puedeCrear = hasPermiso('INVENTARIO_CREAR');
+  const puedeEditar = hasPermiso('INVENTARIO_EDITAR');
+  const puedeAjustar = hasPermiso('INVENTARIO_ENTRADA') || hasPermiso('INVENTARIO_AJUSTE_NEGATIVO');
 
   useEffect(() => {
     loadCategorias();
@@ -184,7 +189,7 @@ export default function Inventario() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-gray-800">Inventario</h1>
-        <button className="btn-primary" onClick={openCreate}>+ Nuevo articulo</button>
+        {puedeCrear && <button className="btn-primary" onClick={openCreate}>+ Nuevo articulo</button>}
       </div>
 
       <div className="relative mb-4 max-w-md">
@@ -243,9 +248,9 @@ export default function Inventario() {
                 <td>{a.vendible ? <span className="text-emerald-600">Si · ${a.precioVenta ?? 0}</span> : <span className="text-gray-400">No</span>}</td>
                 <td>{a.reservable ? <span className="text-emerald-600">Si</span> : <span className="text-gray-400">No</span>}</td>
                 <td className="text-right space-x-2">
-                  <button className="text-brand-600 hover:underline" onClick={() => setModalAjuste(a)}>Ajustar</button>
-                  <button className="text-brand-600 hover:underline" onClick={() => openEdit(a)}>Editar</button>
-                  <button className="text-red-600 hover:underline" onClick={() => handleDeactivate(a)}>Desactivar</button>
+                  {puedeAjustar && <button className="text-brand-600 hover:underline" onClick={() => setModalAjuste(a)}>Ajustar</button>}
+                  {puedeEditar && <button className="text-brand-600 hover:underline" onClick={() => openEdit(a)}>Editar</button>}
+                  {puedeEditar && <button className="text-red-600 hover:underline" onClick={() => handleDeactivate(a)}>Desactivar</button>}
                 </td>
               </tr>
             ))}

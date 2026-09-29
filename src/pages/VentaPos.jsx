@@ -3,8 +3,11 @@ import { Link } from 'react-router-dom';
 import * as inventarioApi from '../api/inventario';
 import * as ventasApi from '../api/ventas';
 import * as cortesCajaApi from '../api/cortesCaja';
+import * as planesApi from '../api/membresiaPlanes';
 import { useNotify } from '../context/NotifyContext.jsx';
 import { printVentaTicket } from '../utils/printer';
+import Modal from '../components/Modal.jsx';
+import RegistrarMembresiaForm from '../components/RegistrarMembresiaForm.jsx';
 
 const SCAN_GAP_MS = 50;
 const MIN_CODE_LENGTH = 3;
@@ -35,6 +38,11 @@ function lineSubtotal(item) {
 }
 
 export default function VentaPos() {
+  const [tab, setTab] = useState('productos');
+  const [planes, setPlanes] = useState([]);
+  const [planSeleccionado, setPlanSeleccionado] = useState(null);
+  const [modalRegistrarMembresia, setModalRegistrarMembresia] = useState(false);
+  const [successMembresia, setSuccessMembresia] = useState(null);
   const [corteAbierto, setCorteAbierto] = useState(null);
   const [loadingCorte, setLoadingCorte] = useState(true);
   const [query, setQuery] = useState('');
@@ -65,7 +73,18 @@ export default function VentaPos() {
   useEffect(() => {
     cargarCorte();
     inventarioApi.listCategoriasInventario().then(({ data }) => setCategorias(data.data));
+    planesApi.listMembresiaPlanesActivos().then(({ data }) => setPlanes(data.data));
   }, []);
+
+  function handleMembresiaRegistrada(membresia) {
+    setModalRegistrarMembresia(false);
+    setPlanSeleccionado(null);
+    setSuccessMembresia(membresia);
+  }
+
+  function nuevaMembresia() {
+    setSuccessMembresia(null);
+  }
 
   function cargarCorte() {
     setLoadingCorte(true);
@@ -101,7 +120,7 @@ export default function VentaPos() {
   // Deteccion de escaneo: un lector de codigo de barras "escribe" muy rapido y termina con Enter
   useEffect(() => {
     function onKeyDown(e) {
-      if (success || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (success || successMembresia || tab !== 'productos' || e.ctrlKey || e.metaKey || e.altKey) return;
       if (document.activeElement === searchInputRef.current) return;
 
       const now = Date.now();
@@ -121,7 +140,7 @@ export default function VentaPos() {
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [success]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [success, successMembresia, tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function buscarPorCodigo(codigo) {
     try {
@@ -337,8 +356,98 @@ export default function VentaPos() {
     );
   }
 
+  if (successMembresia) {
+    return (
+      <div className="max-w-md mx-auto card text-center">
+        <p className="text-4xl mb-2">✅</p>
+        <h2 className="text-lg font-bold text-gray-800 mb-1">Membresia registrada</h2>
+        <p className="text-sm text-gray-500 mb-4">{successMembresia.alumnoNombre}</p>
+        <div className="text-left text-sm space-y-1 mb-4 border-t border-b border-gray-100 py-3">
+          <div className="flex justify-between"><span>Plan</span><strong>{successMembresia.planNombre}</strong></div>
+          <div className="flex justify-between"><span>Total</span><strong>${Number(successMembresia.precioFinal).toFixed(2)}</strong></div>
+          <div className="flex justify-between text-gray-500"><span>Pagado</span><span>${Number(successMembresia.totalPagado).toFixed(2)}</span></div>
+          {Number(successMembresia.saldo) > 0 && (
+            <div className="flex justify-between text-amber-600"><span>Saldo pendiente</span><span>${Number(successMembresia.saldo).toFixed(2)}</span></div>
+          )}
+        </div>
+        <button className="btn-primary w-full" onClick={nuevaMembresia}>Registrar otra membresia</button>
+      </div>
+    );
+  }
+
   return (
-    <div className="grid lg:grid-cols-3 gap-4">
+    <div>
+      <div className="flex gap-1 bg-gray-100 rounded-full p-1 w-fit mb-4">
+        <button
+          type="button"
+          className={'px-4 py-1.5 rounded-full text-sm font-medium transition-colors ' + (tab === 'productos' ? 'bg-white text-brand-700 shadow-sm' : 'text-gray-500 hover:text-gray-700')}
+          onClick={() => setTab('productos')}
+        >
+          🛒 Productos
+        </button>
+        <button
+          type="button"
+          className={'px-4 py-1.5 rounded-full text-sm font-medium transition-colors ' + (tab === 'membresias' ? 'bg-white text-brand-700 shadow-sm' : 'text-gray-500 hover:text-gray-700')}
+          onClick={() => setTab('membresias')}
+        >
+          🎫 Membresias y planes
+        </button>
+      </div>
+
+      {tab === 'membresias' ? (
+        <div className="grid lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              {planes.map((p) => (
+                <button
+                  type="button"
+                  key={p.id}
+                  onClick={() => setPlanSeleccionado(p)}
+                  className={'card text-left transition-all ' + (planSeleccionado?.id === p.id ? 'ring-2 ring-brand-500' : 'hover:shadow-md')}
+                >
+                  <h3 className="font-semibold text-gray-800">{p.nombre}</h3>
+                  <p className="text-2xl font-bold text-brand-700 my-1">${Number(p.precio).toFixed(2)}</p>
+                  <p className="text-xs text-gray-500">
+                    {p.tipoPlan === 'PERIODO' && `${p.duracionCantidad} ${p.duracionUnidad?.toLowerCase()}(s)`}
+                    {p.tipoPlan === 'POR_CLASES' && `${p.numeroClasesIncluidas} clases`}
+                    {p.tipoPlan === 'PASE' && '1 clase individual'}
+                    {p.tipoPlan === 'PERSONALIZADO' && 'Personalizado'}
+                  </p>
+                </button>
+              ))}
+              {planes.length === 0 && <p className="text-sm text-gray-500">Aun no hay planes de membresia activos.</p>}
+            </div>
+          </div>
+
+          <div className="card h-fit sticky top-4 space-y-3">
+            <h3 className="font-semibold text-gray-700">Plan seleccionado</h3>
+            {planSeleccionado ? (
+              <>
+                <div>
+                  <p className="font-medium text-gray-800">{planSeleccionado.nombre}</p>
+                  <p className="text-2xl font-bold text-brand-700 my-1">${Number(planSeleccionado.precio).toFixed(2)}</p>
+                  <p className="text-xs text-gray-500">
+                    {planSeleccionado.tipoPlan === 'PERIODO' && `Vigencia: ${planSeleccionado.duracionCantidad} ${planSeleccionado.duracionUnidad?.toLowerCase()}(s)`}
+                    {planSeleccionado.tipoPlan === 'POR_CLASES' && `${planSeleccionado.numeroClasesIncluidas} clases incluidas`}
+                    {planSeleccionado.tipoPlan === 'PASE' && '1 clase individual'}
+                    {planSeleccionado.tipoPlan === 'PERSONALIZADO' && 'Plan personalizado'}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {planSeleccionado.accesoCompleto ? 'Acceso a todas las disciplinas' : (planSeleccionado.disciplinaNombres?.join(', ') || 'Sin disciplinas asignadas')}
+                  </p>
+                  {planSeleccionado.permiteAbonos && (
+                    <p className="text-xs text-emerald-600 mt-1">Permite abonos{planSeleccionado.montoMinimoAbono ? ` (min. $${Number(planSeleccionado.montoMinimoAbono).toFixed(2)})` : ''}</p>
+                  )}
+                </div>
+                <button className="btn-primary w-full" onClick={() => setModalRegistrarMembresia(true)}>Registrar membresia</button>
+              </>
+            ) : (
+              <p className="text-sm text-gray-400">Selecciona un plan de la lista para ver su informacion.</p>
+            )}
+          </div>
+        </div>
+      ) : (
+      <div className="grid lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 space-y-3">
         {!corteAbierto && (
           <div className="bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg px-4 py-3">
@@ -558,6 +667,18 @@ export default function VentaPos() {
           {loading ? 'Registrando...' : 'Cobrar'}
         </button>
       </div>
+      </div>
+      )}
+
+      {modalRegistrarMembresia && planSeleccionado && (
+        <Modal title="Registrar membresia" onClose={() => setModalRegistrarMembresia(false)}>
+          <RegistrarMembresiaForm
+            planFijo={planSeleccionado}
+            onSuccess={handleMembresiaRegistrada}
+            onCancel={() => setModalRegistrarMembresia(false)}
+          />
+        </Modal>
+      )}
     </div>
   );
 }

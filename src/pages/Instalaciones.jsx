@@ -3,6 +3,7 @@ import * as disciplinasApi from '../api/disciplinas';
 import * as lugaresApi from '../api/lugares';
 import * as sucursalesApi from '../api/sucursales';
 import { useNotify } from '../context/NotifyContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
 
 const emptyLugarForm = { sucursalId: '', nombre: '', direccion: '', notas: '', capacidadMaxima: '', disciplinaIds: [] };
@@ -14,6 +15,8 @@ export default function Instalaciones() {
   const [modalLugar, setModalLugar] = useState(null);
   const [lugarForm, setLugarForm] = useState(emptyLugarForm);
   const { notify, confirmDialog } = useNotify();
+  const { hasPermiso } = useAuth();
+  const puedeAdministrar = hasPermiso('INSTALACIONES_ADMINISTRAR');
 
   const unicaSucursal = sucursales.length === 1 ? sucursales[0] : null;
 
@@ -85,7 +88,7 @@ export default function Instalaciones() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-gray-800">Instalaciones</h1>
-        <button className="btn-primary" onClick={openCreateLugar}>+ Instalacion</button>
+        {puedeAdministrar && <button className="btn-primary" onClick={openCreateLugar}>+ Instalacion</button>}
       </div>
 
       <div className="card overflow-x-auto">
@@ -97,7 +100,7 @@ export default function Instalaciones() {
               <th>Direccion</th>
               <th>Capacidad</th>
               <th>Disciplinas</th>
-              <th></th>
+              {puedeAdministrar && <th></th>}
             </tr>
           </thead>
           <tbody>
@@ -108,15 +111,17 @@ export default function Instalaciones() {
                 <td className="text-gray-600">{l.direccion || '-'}</td>
                 <td className="text-gray-500">{l.capacidadMaxima ?? 'Sin limite'}</td>
                 <td className="text-gray-500">{l.disciplinaNombres?.length ? l.disciplinaNombres.join(', ') : 'Todas'}</td>
-                <td className="text-right space-x-2">
-                  <button className="text-brand-600 hover:underline" onClick={() => openEditLugar(l)}>Editar</button>
-                  <button className="text-red-600 hover:underline" onClick={() => handleDeactivateLugar(l)}>Desactivar</button>
-                </td>
+                {puedeAdministrar && (
+                  <td className="text-right space-x-2">
+                    <button className="text-brand-600 hover:underline" onClick={() => openEditLugar(l)}>Editar</button>
+                    <button className="text-red-600 hover:underline" onClick={() => handleDeactivateLugar(l)}>Desactivar</button>
+                  </td>
+                )}
               </tr>
             ))}
             {lugares.length === 0 && (
               <tr>
-                <td colSpan={sucursales.length > 1 ? 6 : 5} className="py-6 text-center text-gray-400">
+                <td colSpan={(sucursales.length > 1 ? 5 : 4) + (puedeAdministrar ? 1 : 0)} className="py-6 text-center text-gray-400">
                   Aun no hay instalaciones registradas.
                 </td>
               </tr>

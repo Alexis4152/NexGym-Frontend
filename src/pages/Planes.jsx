@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import * as planesApi from '../api/membresiaPlanes';
 import * as disciplinasApi from '../api/disciplinas';
 import { useNotify } from '../context/NotifyContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
 
 const TIPOS_PLAN = [
@@ -29,6 +30,8 @@ export default function Planes() {
   const [modalPlan, setModalPlan] = useState(null);
   const [planForm, setPlanForm] = useState(emptyPlanForm);
   const { notify, confirmDialog } = useNotify();
+  const { hasPermiso } = useAuth();
+  const puedeAdministrar = hasPermiso('MEMBRESIAS_PLANES_ADMINISTRAR');
 
   useEffect(() => {
     cargarPlanes();
@@ -104,7 +107,7 @@ export default function Planes() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-gray-800">Planes de membresia</h1>
-        <button className="btn-primary" onClick={openCreatePlan}>+ Plan</button>
+        {puedeAdministrar && <button className="btn-primary" onClick={openCreatePlan}>+ Plan</button>}
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -112,10 +115,12 @@ export default function Planes() {
           <div key={p.id} className="card">
             <div className="flex items-start justify-between">
               <h3 className="font-semibold text-gray-800">{p.nombre}</h3>
-              <div className="space-x-2 text-xs">
-                <button className="text-brand-600 hover:underline" onClick={() => openEditPlan(p)}>Editar</button>
-                <button className="text-red-600 hover:underline" onClick={() => handleDeactivatePlan(p)}>Desactivar</button>
-              </div>
+              {puedeAdministrar && (
+                <div className="space-x-2 text-xs">
+                  <button className="text-brand-600 hover:underline" onClick={() => openEditPlan(p)}>Editar</button>
+                  <button className="text-red-600 hover:underline" onClick={() => handleDeactivatePlan(p)}>Desactivar</button>
+                </div>
+              )}
             </div>
             <p className="text-2xl font-bold text-brand-700 my-1">${Number(p.precio).toFixed(2)}</p>
             <p className="text-xs text-gray-500">

@@ -5,6 +5,7 @@ import * as instructoresApi from '../api/instructores';
 import * as lugaresApi from '../api/lugares';
 import * as sucursalesApi from '../api/sucursales';
 import { useNotify } from '../context/NotifyContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
 
 const DIAS = ['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO', 'DOMINGO'];
@@ -19,6 +20,10 @@ export default function Clases() {
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const { notify, confirmDialog } = useNotify();
+  const { hasPermiso } = useAuth();
+  const puedeCrear = hasPermiso('CLASES_CREAR');
+  const puedeEditar = hasPermiso('CLASES_EDITAR');
+  const puedeCancelar = hasPermiso('CLASES_CANCELAR');
 
   const unicaSucursal = sucursales.length === 1 ? sucursales[0] : null;
   const disciplinaSeleccionada = disciplinas.find((d) => String(d.id) === String(form.disciplinaId));
@@ -120,9 +125,11 @@ export default function Clases() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-gray-800">Clases y horarios</h1>
-        <button className="btn-primary" onClick={openCreate}>
-          + Nueva clase
-        </button>
+        {puedeCrear && (
+          <button className="btn-primary" onClick={openCreate}>
+            + Nueva clase
+          </button>
+        )}
       </div>
 
       <div className="grid gap-3">
@@ -144,10 +151,12 @@ export default function Clases() {
                         <span className="text-gray-400"> · cupo {c.capacidadMaxima}</span>
                         {c.lugarDireccion && <div className="text-xs text-gray-400">{c.lugarDireccion}</div>}
                       </div>
-                      <div className="space-x-2">
-                        <button className="text-brand-600 hover:underline" onClick={() => openEdit(c)}>Editar</button>
-                        <button className="text-red-600 hover:underline" onClick={() => handleDeactivate(c)}>Desactivar</button>
-                      </div>
+                      {(puedeEditar || puedeCancelar) && (
+                        <div className="space-x-2">
+                          {puedeEditar && <button className="text-brand-600 hover:underline" onClick={() => openEdit(c)}>Editar</button>}
+                          {puedeCancelar && <button className="text-red-600 hover:underline" onClick={() => handleDeactivate(c)}>Desactivar</button>}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
