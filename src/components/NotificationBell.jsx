@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import * as notificacionesApi from '../api/notificaciones';
 
@@ -20,8 +21,26 @@ export default function NotificationBell() {
   const [count, setCount] = useState(0);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [pos, setPos] = useState(null);
   const boxRef = useRef(null);
+  const panelRef = useRef(null);
   const navigate = useNavigate();
+
+  // El panel se pinta en un portal con posicion fija: la campana vive en el encabezado
+  // del sidebar, que tiene overflow-hidden (para la animacion de colapsar) y lo recortaria.
+  function calcularPosicion() {
+    if (!boxRef.current) return;
+    const rect = boxRef.current.getBoundingClientRect();
+    const ancho = Math.min(320, window.innerWidth * 0.9);
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - ancho - 8));
+    setPos({ top: rect.bottom + 8, left });
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    window.addEventListener('resize', calcularPosicion);
+    return () => window.removeEventListener('resize', calcularPosicion);
+  }, [open]);
 
   function cargarContador() {
     notificacionesApi.countNoLeidas().then(({ data }) => setCount(data.data.count)).catch(() => {});
@@ -47,7 +66,8 @@ export default function NotificationBell() {
 
   useEffect(() => {
     function onClickOutside(e) {
-      if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false);
+      if (boxRef.current?.contains(e.target) || panelRef.current?.contains(e.target)) return;
+      setOpen(false);
     }
     document.addEventListener('mousedown', onClickOutside);
     return () => document.removeEventListener('mousedown', onClickOutside);
@@ -55,8 +75,11 @@ export default function NotificationBell() {
 
   function toggle() {
     const next = !open;
+    if (next) {
+      calcularPosicion();
+      cargarLista();
+    }
     setOpen(next);
-    if (next) cargarLista();
   }
 
   async function handleLeer(n) {
@@ -92,8 +115,12 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {open && (
-        <div className="absolute left-0 mt-2 w-80 max-w-[90vw] bg-white rounded-xl shadow-lg border border-gray-200 z-50 max-h-[70vh] flex flex-col">
+      {open && pos && createPortal(
+        <div
+          ref={panelRef}
+          style={{ top: pos.top, left: pos.left }}
+          className="fixed w-80 max-w-[90vw] bg-white rounded-xl shadow-lg border border-gray-200 z-[60] max-h-[70vh] flex flex-col"
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <span className="font-semibold text-gray-800 text-sm">Notificaciones</span>
             {count > 0 && (
@@ -131,7 +158,8 @@ export default function NotificationBell() {
           >
             Ver todas
           </Link>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
