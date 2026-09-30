@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import * as alumnosApi from '../api/alumnos';
 import * as membresiasApi from '../api/membresias';
 import * as planesApi from '../api/membresiaPlanes';
 import * as disciplinasApi from '../api/disciplinas';
 import { useNotify } from '../context/NotifyContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
+import { generarQrDataUrl } from '../utils/qr.js';
 
 const ESTADO_COLOR = {
   PENDIENTE: 'bg-amber-100 text-amber-700',
@@ -42,7 +44,17 @@ export default function AlumnoDetalle() {
   const [modalRenovar, setModalRenovar] = useState(false);
   const [renovarForm, setRenovarForm] = useState({ planId: '', disciplinaIds: [], descuento: '0', montoPagoInicial: '', metodoPago: 'EFECTIVO' });
   const [modalMotivo, setModalMotivo] = useState(null); // { accion: 'suspender'|'cancelar', motivo: '' }
+  const [qrImagen, setQrImagen] = useState(null);
+  const [regenerandoQr, setRegenerandoQr] = useState(false);
   const { notify, confirmDialog } = useNotify();
+  const { hasPermiso } = useAuth();
+  const puedeEditar = hasPermiso('ALUMNOS_EDITAR');
+  const pagosRef = useRef(null);
+
+  function verPagos(m) {
+    setSeleccionada(m);
+    pagosRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   useEffect(() => {
     cargarAlumno();
@@ -50,6 +62,11 @@ export default function AlumnoDetalle() {
     planesApi.listMembresiaPlanesActivos().then(({ data }) => setPlanes(data.data));
     disciplinasApi.listDisciplinasActivas().then(({ data }) => setDisciplinas(data.data));
   }, [id]);
+
+  useEffect(() => {
+    if (alumno?.codigoQr) generarQrDataUrl(alumno.codigoQr).then(setQrImagen);
+    else setQrImagen(null);
+  }, [alumno?.codigoQr]);
 
   useEffect(() => {
     if (seleccionada) cargarPagos(seleccionada.id);
@@ -171,6 +188,34 @@ export default function AlumnoDetalle() {
     }
   }
 
+  async function handleRegenerarQr() {
+    const ok = await confirmDialog('¿Regenerar el codigo QR? El anterior dejara de funcionar de inmediato.', { danger: true });
+    if (!ok) return;
+    setRegenerandoQr(true);
+    try {
+      const { data } = await alumnosApi.regenerarQrAlumno(id);
+      setAlumno(data.data);
+      notify('QR regenerado', 'success');
+    } catch (err) {
+      notify(err.response?.data?.message || 'No se pudo regenerar el QR', 'error');
+    } finally {
+      setRegenerandoQr(false);
+    }
+  }
+
+  function handleImprimirQr() {
+    const ventana = window.open('', '_blank', 'width=400,height=500');
+    ventana.document.write(`
+      <html><head><title>QR - ${alumno.nombre}</title></head>
+      <body style="text-align:center;font-family:sans-serif;padding:20px;">
+        <h3>${alumno.nombre}</h3>
+        <img src="${qrImagen}" style="width:240px;height:240px;" />
+        <script>window.onload = () => window.print();</script>
+      </body></html>
+    `);
+    ventana.document.close();
+  }
+
   if (!alumno) return <p className="text-gray-400">Cargando...</p>;
 
   return (
@@ -179,16 +224,33 @@ export default function AlumnoDetalle() {
         ← Volver a alumnos
       </Link>
 
-      <div className="card mt-4 mb-6">
-        <h1 className="text-xl font-bold text-gray-800">{alumno.nombre}</h1>
-        <div className="grid sm:grid-cols-2 gap-x-8 gap-y-1 text-sm text-gray-600 mt-3">
-          <p>Telefono: {alumno.telefono || '-'}</p>
-          <p>Correo: {alumno.email || '-'}</p>
-          <p>Contacto de emergencia: {alumno.contactoEmergenciaNombre || '-'} {alumno.contactoEmergenciaTelefono ? `(${alumno.contactoEmergenciaTelefono})` : ''}</p>
-          <p>Ingreso: {alumno.fechaIngreso}</p>
-          <p>Disciplinas de interés: {alumno.disciplinaNombres?.join(', ') || '-'}</p>
+      <div className="card mt-4 mb-6 flex flex-col sm:flex-row gap-4 sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-gray-800">{alumno.nombre}</h1>
+          <div className="grid sm:grid-cols-2 gap-x-8 gap-y-1 text-sm text-gray-600 mt-3">
+            <p>Telefono: {alumno.telefono || '-'}</p>
+            <p>Correo: {alumno.email || '-'}</p>
+            <p>Contacto de emergencia: {alumno.contactoEmergenciaNombre || '-'} {alumno.contactoEmergenciaTelefono ? `(${alumno.contactoEmergenciaTelefono})` : ''}</p>
+            <p>Ingreso: {alumno.fechaIngreso}</p>
+            <p>Disciplinas de interés: {alumno.disciplinaNombres?.join(', ') || '-'}</p>
+          </div>
+          {alumno.observaciones && <p className="text-sm text-gray-500 mt-3 italic">{alumno.observaciones}</p>}
         </div>
-        {alumno.observaciones && <p className="text-sm text-gray-500 mt-3 italic">{alumno.observaciones}</p>}
+
+        {qrImagen && (
+          <div className="text-center shrink-0 self-center sm:self-start">
+            <img src={qrImagen} alt="QR del alumno" className="w-32 h-32 mx-auto border border-gray-200 rounded-lg" />
+            <p className="text-xs text-gray-400 mt-1">QR de asistencia</p>
+            <div className="flex gap-2 mt-2">
+              <button type="button" className="text-xs text-brand-600 hover:underline" onClick={handleImprimirQr}>🖨️ Imprimir</button>
+              {puedeEditar && (
+                <button type="button" className="text-xs text-gray-500 hover:underline" disabled={regenerandoQr} onClick={handleRegenerarQr}>
+                  {regenerandoQr ? 'Regenerando...' : '↻ Regenerar'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {seleccionada && (
@@ -297,7 +359,11 @@ export default function AlumnoDetalle() {
                     <span className={'px-2 py-0.5 rounded-full text-xs ' + ESTADO_COLOR[m.estado]}>{m.estado}</span>
                     {m.renovada && <span className="ml-1 text-[10px] text-brand-600">renovada</span>}
                   </td>
-                  <td className="text-right text-xs text-brand-600">Ver pagos →</td>
+                  <td className="text-right">
+                    <button type="button" className="text-xs text-brand-600 hover:underline" onClick={(e) => { e.stopPropagation(); verPagos(m); }}>
+                      Ver pagos →
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -306,7 +372,7 @@ export default function AlumnoDetalle() {
       </div>
 
       {seleccionada && (
-        <div className="card">
+        <div className="card" ref={pagosRef}>
           <h2 className="font-semibold text-gray-800 mb-3">Historial de pagos — {seleccionada.planNombre}</h2>
           {pagos.length === 0 ? (
             <p className="text-sm text-gray-400">Aun no hay pagos registrados para esta membresía.</p>

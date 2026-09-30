@@ -7,10 +7,12 @@ import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
 
 const emptyForm = {
-  categoriaId: '', nombre: '', tipo: 'EQUIPO', codigoBarras: '', stock: 0, stockMinimo: 0,
+  categoriaIds: [], nombre: '', tipo: 'EQUIPO', codigoBarras: '', stock: 0, stockMinimo: 0,
   costo: '', precioVenta: '', vendible: false, reservable: false, descuentoApartadoPorcentaje: '',
   disciplinaIds: [],
 };
+
+const MAXIMO_FOTOS = 3;
 
 export default function Inventario() {
   const [pageData, setPageData] = useState({ content: [], totalPages: 0 });
@@ -80,7 +82,7 @@ export default function Inventario() {
   }
   function openEdit(a) {
     setForm({
-      categoriaId: a.categoriaId || '', nombre: a.nombre, tipo: a.tipo, codigoBarras: a.codigoBarras || '',
+      categoriaIds: a.categoriaIds ? [...a.categoriaIds] : [], nombre: a.nombre, tipo: a.tipo, codigoBarras: a.codigoBarras || '',
       stock: a.stock, stockMinimo: a.stockMinimo, costo: a.costo ?? '', precioVenta: a.precioVenta ?? '',
       vendible: a.vendible, reservable: a.reservable, descuentoApartadoPorcentaje: a.descuentoApartadoPorcentaje ?? '',
       disciplinaIds: a.disciplinaIds || [],
@@ -93,12 +95,16 @@ export default function Inventario() {
     setForm((f) => ({ ...f, disciplinaIds: f.disciplinaIds.includes(id) ? f.disciplinaIds.filter((x) => x !== id) : [...f.disciplinaIds, id] }));
   }
 
+  function toggleCategoria(id) {
+    setForm((f) => ({ ...f, categoriaIds: f.categoriaIds.includes(id) ? f.categoriaIds.filter((x) => x !== id) : [...f.categoriaIds, id] }));
+  }
+
   async function handleCrearCategoria() {
     if (!nuevaCategoria.trim()) return;
     const { data } = await inventarioApi.createCategoriaInventario({ nombre: nuevaCategoria });
     setNuevaCategoria('');
     loadCategorias();
-    setForm((f) => ({ ...f, categoriaId: data.data.id }));
+    setForm((f) => ({ ...f, categoriaIds: [...f.categoriaIds, data.data.id] }));
   }
 
   async function handleSubmit(e) {
@@ -109,7 +115,6 @@ export default function Inventario() {
     }
     const payload = {
       ...form,
-      categoriaId: form.categoriaId || null,
       stock: Number(form.stock),
       stockMinimo: Number(form.stockMinimo),
       costo: form.costo === '' ? null : Number(form.costo),
@@ -281,7 +286,7 @@ export default function Inventario() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Fotos</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Fotos (hasta {MAXIMO_FOTOS}, se ven en la tienda/apartados en linea)</label>
               {modal.editing ? (
                 <div className="flex flex-wrap gap-2">
                   {imagenes.map((img) => (
@@ -298,10 +303,12 @@ export default function Inventario() {
                       </div>
                     </div>
                   ))}
-                  <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer text-gray-400 hover:border-brand-400 hover:text-brand-500 text-xs text-center">
-                    {subiendoImagen ? '...' : '+ Foto'}
-                    <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleSubirImagen} disabled={subiendoImagen} />
-                  </label>
+                  {imagenes.length < MAXIMO_FOTOS && (
+                    <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer text-gray-400 hover:border-brand-400 hover:text-brand-500 text-xs text-center">
+                      {subiendoImagen ? '...' : '+ Foto'}
+                      <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleSubirImagen} disabled={subiendoImagen} />
+                    </label>
+                  )}
                 </div>
               ) : (
                 <p className="text-xs text-gray-400">Guarda el articulo primero; despues podras subir fotos aqui mismo.</p>
@@ -309,14 +316,17 @@ export default function Inventario() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-                <div className="flex gap-2">
-                  <select className="input" value={form.categoriaId} onChange={(e) => setForm({ ...form, categoriaId: e.target.value })}>
-                    <option value="">Sin categoria</option>
-                    {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                  </select>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Categorias (una o varias)</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {categorias.map((c) => (
+                    <button type="button" key={c.id} onClick={() => toggleCategoria(c.id)}
+                      className={'px-3 py-1 rounded-full text-xs border ' + (form.categoriaIds.includes(c.id) ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-300')}>
+                      {c.nombre}
+                    </button>
+                  ))}
+                  {categorias.length === 0 && <p className="text-xs text-gray-400">Aun no hay categorias.</p>}
                 </div>
-                <div className="flex gap-2 mt-1">
+                <div className="flex gap-2">
                   <input className="input text-xs" placeholder="Nueva categoria" value={nuevaCategoria} onChange={(e) => setNuevaCategoria(e.target.value)} />
                   <button type="button" className="btn-secondary text-xs" onClick={handleCrearCategoria}>Agregar</button>
                 </div>

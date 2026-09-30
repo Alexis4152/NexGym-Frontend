@@ -11,3 +11,5 @@ export const subirFotoAlumno = (id, file) => {
   formData.append('file', file);
   return api.post(`/alumnos/${id}/foto`, formData);
 };
+export const buscarAlumnoPorQr = (codigoQr) => api.get(`/alumnos/por-qr/${encodeURIComponent(codigoQr)}`);
+export const regenerarQrAlumno = (id) => api.post(`/alumnos/${id}/regenerar-qr`);

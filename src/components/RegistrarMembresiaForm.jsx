@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import * as membresiasApi from '../api/membresias';
 import * as planesApi from '../api/membresiaPlanes';
 import * as alumnosApi from '../api/alumnos';
 import * as disciplinasApi from '../api/disciplinas';
+import * as cortesCajaApi from '../api/cortesCaja';
 import { useNotify } from '../context/NotifyContext.jsx';
+import { describirPlan, planLleno, textoCupo } from '../utils/planes.js';
 
 const emptyForm = {
   alumnoId: '', planId: '', disciplinaIds: [], fechaInicio: new Date().toISOString().slice(0, 10),
   descuento: '0', montoPagoInicial: '', metodoPago: 'EFECTIVO',
 };
+
+// Un QR leido por un lector "escribe" el token completo + Enter; una busqueda a mano
+// nunca llega a esta longitud (ver misma nota en Asistencia.jsx).
+const LARGO_MINIMO_QR = 20;
 
 /** Formulario de alta de membresia, reutilizado por Membresias.jsx y por la pestana
  * de Membresias/Planes del punto de venta. Con `planFijo` el selector de plan se
@@ -21,6 +28,7 @@ export default function RegistrarMembresiaForm({ planFijo, onSuccess, onCancel }
   const [alumnoQuery, setAlumnoQuery] = useState('');
   const [alumnoResultados, setAlumnoResultados] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const [corteAbierto, setCorteAbierto] = useState(null);
   const { notify, confirmDialog } = useNotify();
 
   useEffect(() => {
@@ -28,6 +36,9 @@ export default function RegistrarMembresiaForm({ planFijo, onSuccess, onCancel }
     if (!planFijo) {
       planesApi.listMembresiaPlanesActivos().then(({ data }) => setPlanes(data.data));
     }
+    // Igual que en el POS: se cobra al registrar (montoPagoInicial), asi que exige un
+    // corte de caja propio abierto (ver MembresiaService#assertCorteAbierto).
+    cortesCajaApi.getCorteAbierto().then(({ data }) => setCorteAbierto(data.data));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -51,10 +62,39 @@ export default function RegistrarMembresiaForm({ planFijo, onSuccess, onCancel }
     });
   }
 
+  async function handleAlumnoKeyDown(e) {
+    if (e.key !== 'Enter' || alumnoQuery.trim().length < LARGO_MINIMO_QR) return;
+    e.preventDefault();
+    try {
+      const { data } = await alumnosApi.buscarAlumnoPorQr(alumnoQuery.trim());
+      setForm((f) => ({ ...f, alumnoId: data.data.id }));
+      setAlumnoQuery(data.data.nombre);
+      setAlumnoResultados([]);
+    } catch {
+      notify('Ningun alumno tiene ese codigo QR', 'error');
+    }
+  }
+
+  function seleccionarPlan(p) {
+    if (planLleno(p)) {
+      notify('Este plan ya alcanzo su cupo maximo de alumnos', 'error');
+      return;
+    }
+    setForm((f) => ({ ...f, planId: p.id, disciplinaIds: [] }));
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
+    if (!corteAbierto) {
+      notify('Debes abrir un corte de caja antes de registrar una membresia', 'error');
+      return;
+    }
     if (!form.alumnoId || !form.planId) {
       notify('Selecciona un alumno y un plan', 'error');
+      return;
+    }
+    if (planSeleccionado && planLleno(planSeleccionado)) {
+      notify('Este plan ya alcanzo su cupo maximo de alumnos', 'error');
       return;
     }
     const ok = await confirmDialog(
@@ -83,9 +123,15 @@ export default function RegistrarMembresiaForm({ planFijo, onSuccess, onCancel }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      {!corteAbierto && (
+        <div className="bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg px-4 py-3">
+          ⚠️ No hay corte de caja abierto. Debes <Link to="/cortes-caja" className="underline font-semibold">abrir un corte</Link> antes de poder registrar una membresía.
+        </div>
+      )}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Alumno</label>
-        <input className="input" placeholder="Buscar alumno..." value={alumnoQuery} onChange={(e) => setAlumnoQuery(e.target.value)} />
+        <label className="block text-sm font-medium text-gray-700 mb-1">Alumno (o escanea su QR)</label>
+        <input className="input" placeholder="Buscar alumno o escanea su QR..." value={alumnoQuery}
+          onChange={(e) => setAlumnoQuery(e.target.value)} onKeyDown={handleAlumnoKeyDown} />
         {alumnoResultados.length > 0 && (
           <div className="border border-gray-200 rounded-lg mt-1 max-h-40 overflow-y-auto">
             {alumnoResultados.map((a) => (
@@ -106,14 +152,41 @@ export default function RegistrarMembresiaForm({ planFijo, onSuccess, onCancel }
         <div className="bg-brand-50 border border-brand-200 rounded-lg px-3 py-2 text-sm">
           <span className="font-medium text-brand-800">{planFijo.nombre}</span>
           <span className="text-brand-600"> — ${Number(planFijo.precio).toFixed(2)}</span>
+          <p className="text-xs text-brand-600 mt-1">{describirPlan(planFijo)}</p>
         </div>
       ) : (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Plan</label>
-          <select className="input" value={form.planId} onChange={(e) => setForm({ ...form, planId: e.target.value, disciplinaIds: [] })}>
-            <option value="">Selecciona un plan</option>
-            {planes.map((p) => <option key={p.id} value={p.id}>{p.nombre} — ${Number(p.precio).toFixed(2)}</option>)}
-          </select>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Plan (selecciona uno para ver su informacion)</label>
+          <div className="grid grid-cols-2 gap-2">
+            {planes.map((p) => {
+              const lleno = planLleno(p);
+              const seleccionado = String(form.planId) === String(p.id);
+              return (
+                <button
+                  type="button"
+                  key={p.id}
+                  onClick={() => seleccionarPlan(p)}
+                  className={
+                    'text-left rounded-lg border px-3 py-2 text-sm transition-colors ' +
+                    (lleno ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-200'
+                      : seleccionado ? 'border-brand-500 ring-1 ring-brand-500 bg-brand-50' : 'border-gray-200 hover:border-brand-300')
+                  }
+                >
+                  <p className="font-medium text-gray-800">{p.nombre}</p>
+                  <p className="text-brand-700 font-bold">${Number(p.precio).toFixed(2)}</p>
+                  {textoCupo(p) && (
+                    <p className={'text-xs mt-0.5 ' + (lleno ? 'text-red-500' : 'text-gray-400')}>{textoCupo(p)}</p>
+                  )}
+                </button>
+              );
+            })}
+            {planes.length === 0 && <p className="text-sm text-gray-400 col-span-2">No hay planes activos.</p>}
+          </div>
+          {planSeleccionado && (
+            <div className="mt-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-600">
+              {describirPlan(planSeleccionado)}
+            </div>
+          )}
         </div>
       )}
 
@@ -166,7 +239,7 @@ export default function RegistrarMembresiaForm({ planFijo, onSuccess, onCancel }
       )}
       <div className="flex gap-2 mt-2">
         {onCancel && <button type="button" className="btn-secondary flex-1" onClick={onCancel}>Cancelar</button>}
-        <button className="btn-primary flex-1" disabled={submitting}>{submitting ? 'Registrando...' : 'Registrar'}</button>
+        <button className="btn-primary flex-1" disabled={submitting || !corteAbierto}>{submitting ? 'Registrando...' : 'Registrar'}</button>
       </div>
     </form>
   );

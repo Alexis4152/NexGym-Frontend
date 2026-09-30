@@ -16,6 +16,9 @@ export default function PublicApartar() {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
   const [exito, setExito] = useState(null);
+  // indice de la foto que se muestra por producto (hasta 3, ver p.imagenes), para poder
+  // hojearlas sin salir de la cuadricula de tarjetas.
+  const [imagenActiva, setImagenActiva] = useState({});
 
   useEffect(() => {
     Promise.all([publicApi.getPublicCentro(slug), publicApi.getPublicApartables(slug)])
@@ -126,15 +129,31 @@ export default function PublicApartar() {
             <p className="text-sm text-gray-500">Aun no hay productos disponibles para apartar.</p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {productos.map((p) => (
+              {productos.map((p) => {
+                const fotos = p.imagenes?.length ? p.imagenes : (p.imagenUrl ? [p.imagenUrl] : []);
+                const indice = Math.min(imagenActiva[p.id] || 0, fotos.length - 1);
+                return (
                 <div key={p.id} className="card">
-                  <div className="aspect-square bg-gray-100 rounded-lg mb-2 overflow-hidden flex items-center justify-center">
-                    {p.imagenUrl ? (
-                      <img src={p.imagenUrl} alt={p.nombre} className="w-full h-full object-cover" />
+                  <div className="aspect-square bg-gray-100 rounded-lg mb-1 overflow-hidden flex items-center justify-center">
+                    {fotos.length > 0 ? (
+                      <img src={fotos[indice]} alt={p.nombre} className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-3xl">🛍️</span>
                     )}
                   </div>
+                  {fotos.length > 1 && (
+                    <div className="flex gap-1 justify-center mb-2">
+                      {fotos.map((foto, i) => (
+                        <button
+                          type="button"
+                          key={i}
+                          onClick={() => setImagenActiva((prev) => ({ ...prev, [p.id]: i }))}
+                          className={'w-2 h-2 rounded-full ' + (i === indice ? 'bg-brand-600' : 'bg-gray-300')}
+                          aria-label={`Foto ${i + 1}`}
+                        />
+                      ))}
+                    </div>
+                  )}
                   <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <p className="text-brand-700 font-semibold">${Number(p.precioConDescuento).toFixed(2)}</p>
@@ -147,7 +166,8 @@ export default function PublicApartar() {
                     + Apartar
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

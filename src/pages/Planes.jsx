@@ -4,6 +4,7 @@ import * as disciplinasApi from '../api/disciplinas';
 import { useNotify } from '../context/NotifyContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
+import { planLleno, textoCupo } from '../utils/planes.js';
 
 const TIPOS_PLAN = [
   { value: 'PERIODO', label: 'Por periodo (semanal, mensual, anual...)' },
@@ -28,10 +29,16 @@ export default function Planes() {
   const [planes, setPlanes] = useState([]);
   const [disciplinas, setDisciplinas] = useState([]);
   const [modalPlan, setModalPlan] = useState(null);
+  const [modalDetalle, setModalDetalle] = useState(null);
   const [planForm, setPlanForm] = useState(emptyPlanForm);
   const { notify, confirmDialog } = useNotify();
   const { hasPermiso } = useAuth();
   const puedeAdministrar = hasPermiso('MEMBRESIAS_PLANES_ADMINISTRAR');
+
+  function abrirPlan(p) {
+    if (puedeAdministrar) openEditPlan(p);
+    else setModalDetalle(p);
+  }
 
   useEffect(() => {
     cargarPlanes();
@@ -112,13 +119,17 @@ export default function Planes() {
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {planes.map((p) => (
-          <div key={p.id} className="card">
+          <div
+            key={p.id}
+            className="card cursor-pointer hover:shadow-md hover:border-brand-300 transition-all"
+            onClick={() => abrirPlan(p)}
+          >
             <div className="flex items-start justify-between">
               <h3 className="font-semibold text-gray-800">{p.nombre}</h3>
               {puedeAdministrar && (
                 <div className="space-x-2 text-xs">
-                  <button className="text-brand-600 hover:underline" onClick={() => openEditPlan(p)}>Editar</button>
-                  <button className="text-red-600 hover:underline" onClick={() => handleDeactivatePlan(p)}>Desactivar</button>
+                  <button className="text-brand-600 hover:underline" onClick={(e) => { e.stopPropagation(); openEditPlan(p); }}>Editar</button>
+                  <button className="text-red-600 hover:underline" onClick={(e) => { e.stopPropagation(); handleDeactivatePlan(p); }}>Desactivar</button>
                 </div>
               )}
             </div>
@@ -132,6 +143,9 @@ export default function Planes() {
             </p>
             {p.disciplinaNombres?.length > 0 && <p className="text-xs text-gray-400 mt-1">{p.disciplinaNombres.join(', ')}</p>}
             {p.permiteAbonos && <p className="text-xs text-emerald-600 mt-1">Permite abonos{p.montoMinimoAbono ? ` (min. $${Number(p.montoMinimoAbono).toFixed(2)})` : ''}</p>}
+            {textoCupo(p) && (
+              <p className={'text-xs mt-1 font-medium ' + (planLleno(p) ? 'text-red-500' : 'text-gray-400')}>{textoCupo(p)}</p>
+            )}
           </div>
         ))}
         {planes.length === 0 && <p className="text-sm text-gray-500">Aun no hay planes de membresia.</p>}
@@ -243,6 +257,54 @@ export default function Planes() {
             </div>
             <button className="btn-primary w-full mt-2">{modalPlan.editing ? 'Guardar cambios' : 'Crear plan'}</button>
           </form>
+        </Modal>
+      )}
+
+      {modalDetalle && (
+        <Modal title={modalDetalle.nombre} onClose={() => setModalDetalle(null)}>
+          <div className="space-y-3 text-sm">
+            <p className="text-3xl font-bold text-brand-700">${Number(modalDetalle.precio).toFixed(2)}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-gray-500 mb-0.5">Tipo de plan</p>
+                <p className="font-medium text-gray-800">{TIPOS_PLAN.find((t) => t.value === modalDetalle.tipoPlan)?.label || modalDetalle.tipoPlan}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 mb-0.5">Vigencia</p>
+                <p className="font-medium text-gray-800">
+                  {modalDetalle.tipoPlan === 'PERIODO' && `${modalDetalle.duracionCantidad} ${modalDetalle.duracionUnidad?.toLowerCase()}(s)`}
+                  {modalDetalle.tipoPlan === 'POR_CLASES' && `${modalDetalle.numeroClasesIncluidas} clases${modalDetalle.duracionCantidad ? ` · ${modalDetalle.duracionCantidad} ${modalDetalle.duracionUnidad?.toLowerCase()}(s)` : ' · sin vencimiento'}`}
+                  {modalDetalle.tipoPlan === 'PASE' && '1 clase individual'}
+                  {modalDetalle.tipoPlan === 'PERSONALIZADO' && 'Personalizado'}
+                </p>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Disciplinas incluidas</p>
+              <p className="font-medium text-gray-800">
+                {modalDetalle.accesoCompleto
+                  ? 'Acceso a todas las disciplinas'
+                  : modalDetalle.disciplinaNombres?.length
+                    ? `${modalDetalle.disciplinaNombres.join(', ')}${modalDetalle.disciplinaNombres.length > 1 ? ` (elige hasta ${modalDetalle.maxDisciplinasSeleccionables})` : ''}`
+                    : 'Sin disciplinas asignadas'}
+              </p>
+            </div>
+            {modalDetalle.permiteAbonos && (
+              <div>
+                <p className="text-xs text-gray-500 mb-0.5">Abonos</p>
+                <p className="font-medium text-emerald-600">
+                  Permite pagos parciales{modalDetalle.montoMinimoAbono ? ` (minimo $${Number(modalDetalle.montoMinimoAbono).toFixed(2)})` : ''}
+                </p>
+              </div>
+            )}
+            {textoCupo(modalDetalle) && (
+              <div>
+                <p className="text-xs text-gray-500 mb-0.5">Cupo</p>
+                <p className={'font-medium ' + (planLleno(modalDetalle) ? 'text-red-600' : 'text-gray-800')}>{textoCupo(modalDetalle)}</p>
+              </div>
+            )}
+            <button type="button" className="btn-secondary w-full mt-2" onClick={() => setModalDetalle(null)}>Cerrar</button>
+          </div>
         </Modal>
       )}
     </div>

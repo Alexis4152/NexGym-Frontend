@@ -23,9 +23,13 @@ export default function ForgotPassword() {
       <div className="card w-full max-w-sm">
         <h1 className="text-lg font-bold text-gray-800 mb-4">Recuperar contrasena</h1>
         {sent ? (
-          <p className="text-sm text-gray-600">
-            Si el correo existe en el sistema, recibiras instrucciones para restablecer tu contrasena.
-          </p>
+          <div className="text-sm text-gray-600 space-y-2">
+            <p>Si el correo existe en el sistema, te llegara un mensaje con un enlace para restablecer tu contrasena.</p>
+            <p>
+              Da clic en ese enlace; si no abre, copia el codigo que viene en el correo y pegalo en la{' '}
+              <Link to="/reset-password" className="text-brand-600 hover:underline">pantalla de restablecer contrasena</Link>.
+            </p>
+          </div>
         ) : (
           <form onSubmit={handleSubmit}>
             <label className="block text-sm font-medium text-gray-700 mb-1">Correo</label>

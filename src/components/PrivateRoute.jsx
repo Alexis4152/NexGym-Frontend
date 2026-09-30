@@ -2,7 +2,10 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function PrivateRoute({ children, section, adminOnly, superAdminOnly }) {
-  const { user, loading, hasSection, isAdmin, isSuperAdmin, isPlatformActor, actingCentroId, necesitaSeleccionarSucursal } = useAuth();
+  const {
+    user, loading, hasSection, isAdmin, isSuperAdmin, isPlatformActor, actingCentroId,
+    necesitaSeleccionarSucursal,
+  } = useAuth();
   const { pathname } = useLocation();
 
   if (loading) {
@@ -21,7 +24,6 @@ export default function PrivateRoute({ children, section, adminOnly, superAdminO
   if (necesitaSeleccionarSucursal) {
     return pathname === '/select-sucursal' ? children : <Navigate to="/select-sucursal" replace />;
   }
-
   if (superAdminOnly && !isSuperAdmin) return <Navigate to="/" replace />;
   if (adminOnly && !isAdmin) return <Navigate to="/" replace />;
   if (section && !hasSection(section) && !isSuperAdmin) return <Navigate to="/" replace />;

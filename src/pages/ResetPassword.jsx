@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as authApi from '../api/auth';
 import { useNotify } from '../context/NotifyContext.jsx';
 
 export default function ResetPassword() {
-  const [token, setToken] = useState('');
+  const [searchParams] = useSearchParams();
+  // Si llega desde el enlace del correo (?token=...) se precarga solo; si el usuario
+  // prefirio copiar el codigo a mano, el campo sigue editable igual que antes.
+  const [token, setToken] = useState(() => searchParams.get('token') || '');
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { notify } = useNotify();

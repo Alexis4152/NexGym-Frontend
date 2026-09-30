@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import * as alumnosApi from '../api/alumnos';
 import * as disciplinasApi from '../api/disciplinas';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
 import PhoneInput from '../components/PhoneInput.jsx';
+import { generarQrDataUrl } from '../utils/qr.js';
+
+// Un QR leido por un lector "escribe" el token completo + Enter; una busqueda a mano
+// nunca llega a esta longitud (ver misma nota en Asistencia.jsx).
+const LARGO_MINIMO_QR = 20;
 
 const emptyForm = {
   nombre: '', fechaNacimiento: '', telefono: '', email: '',
@@ -25,7 +30,32 @@ export default function Alumnos() {
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState({});
   const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const [modalQrNuevo, setModalQrNuevo] = useState(null); // { nombre, qrImagen }
   const { notify, confirmDialog } = useNotify();
+  const navigate = useNavigate();
+
+  function handleImprimirQrNuevo() {
+    const ventana = window.open('', '_blank', 'width=400,height=500');
+    ventana.document.write(`
+      <html><head><title>QR - ${modalQrNuevo.nombre}</title></head>
+      <body style="text-align:center;font-family:sans-serif;padding:20px;">
+        <h3>${modalQrNuevo.nombre}</h3>
+        <img src="${modalQrNuevo.qrImagen}" style="width:240px;height:240px;" />
+        <script>window.onload = () => window.print();</script>
+      </body></html>
+    `);
+    ventana.document.close();
+  }
+
+  async function handleBuscarKeyDown(e) {
+    if (e.key !== 'Enter' || q.trim().length < LARGO_MINIMO_QR) return;
+    try {
+      const { data } = await alumnosApi.buscarAlumnoPorQr(q.trim());
+      navigate(`/alumnos/${data.data.id}`);
+    } catch {
+      notify('Ningun alumno tiene ese codigo QR', 'error');
+    }
+  }
 
   useEffect(() => {
     disciplinasApi.listDisciplinasActivas().then(({ data }) => setDisciplinas(data.data));
@@ -91,12 +121,20 @@ export default function Alumnos() {
       if (modal.editing) {
         await alumnosApi.updateAlumno(modal.editing, payload);
         notify('Alumno actualizado', 'success');
+        setModal(null);
+        load();
       } else {
-        await alumnosApi.createAlumno(payload);
-        notify('Alumno registrado', 'success');
+        const { data } = await alumnosApi.createAlumno(payload);
+        const nuevo = data.data;
+        notify(
+          nuevo.email ? 'Alumno registrado, su QR tambien se envio por correo' : 'Alumno registrado',
+          'success'
+        );
+        setModal(null);
+        load();
+        const qrImagen = await generarQrDataUrl(nuevo.codigoQr);
+        setModalQrNuevo({ nombre: nuevo.nombre, qrImagen });
       }
-      setModal(null);
-      load();
     } catch (err) {
       setErrors(err.response?.data?.data || {});
     }
@@ -119,7 +157,8 @@ export default function Alumnos() {
         </button>
       </div>
 
-      <input className="input max-w-xs mb-4" placeholder="Buscar por nombre..." value={q} onChange={(e) => { setPage(0); setQ(e.target.value); }} />
+      <input className="input max-w-xs mb-4" placeholder="Buscar por nombre o escanea su QR..." value={q}
+        onChange={(e) => { setPage(0); setQ(e.target.value); }} onKeyDown={handleBuscarKeyDown} />
 
       <div className="card overflow-x-auto">
         <table className="w-full text-sm">
@@ -250,6 +289,21 @@ export default function Alumnos() {
             </div>
             <button className="btn-primary w-full mt-2">{modal.editing ? 'Guardar cambios' : 'Registrar alumno'}</button>
           </form>
+        </Modal>
+      )}
+
+      {modalQrNuevo && (
+        <Modal title="Alumno registrado" onClose={() => setModalQrNuevo(null)}>
+          <div className="text-center space-y-3">
+            <p className="text-sm text-gray-600">
+              El QR de <strong>{modalQrNuevo.nombre}</strong> ya esta listo para usarse en Asistencia, punto de venta y demas busquedas.
+            </p>
+            <img src={modalQrNuevo.qrImagen} alt="QR del alumno" className="w-48 h-48 mx-auto border border-gray-200 rounded-lg" />
+            <div className="flex gap-2">
+              <button type="button" className="btn-secondary flex-1" onClick={handleImprimirQrNuevo}>🖨️ Imprimir ahora</button>
+              <button type="button" className="btn-primary flex-1" onClick={() => setModalQrNuevo(null)}>Listo</button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>

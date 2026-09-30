@@ -4,13 +4,18 @@ import * as inventarioApi from '../api/inventario';
 import * as ventasApi from '../api/ventas';
 import * as cortesCajaApi from '../api/cortesCaja';
 import * as planesApi from '../api/membresiaPlanes';
+import * as alumnosApi from '../api/alumnos';
 import { useNotify } from '../context/NotifyContext.jsx';
 import { printVentaTicket } from '../utils/printer';
 import Modal from '../components/Modal.jsx';
 import RegistrarMembresiaForm from '../components/RegistrarMembresiaForm.jsx';
+import { describirPlan, planLleno, textoCupo } from '../utils/planes.js';
 
 const SCAN_GAP_MS = 50;
 const MIN_CODE_LENGTH = 3;
+// Un QR de alumno leido por el lector "escribe" el token completo + Enter; un nombre
+// tecleado a mano nunca llega a esta longitud (ver misma nota en Asistencia.jsx).
+const LARGO_MINIMO_QR = 20;
 
 const METODOS_PAGO = [
   { value: 'EFECTIVO', label: '💵 Efectivo' },
@@ -86,6 +91,27 @@ export default function VentaPos() {
     setSuccessMembresia(null);
   }
 
+  async function handleClienteKeyDown(e) {
+    if (e.key !== 'Enter' || clienteNombre.trim().length < LARGO_MINIMO_QR) return;
+    e.preventDefault();
+    try {
+      const { data } = await alumnosApi.buscarAlumnoPorQr(clienteNombre.trim());
+      setClienteNombre(data.data.nombre);
+      if (data.data.email) setClienteEmail(data.data.email);
+      notify(`Cliente identificado: ${data.data.nombre}`, 'success');
+    } catch {
+      notify('Ningun alumno tiene ese codigo QR', 'error');
+    }
+  }
+
+  function seleccionarPlanPos(p) {
+    if (planLleno(p)) {
+      notify('Este plan ya alcanzo su cupo maximo de alumnos', 'error');
+      return;
+    }
+    setPlanSeleccionado(p);
+  }
+
   function cargarCorte() {
     setLoadingCorte(true);
     cortesCajaApi.getCorteAbierto()
@@ -121,7 +147,11 @@ export default function VentaPos() {
   useEffect(() => {
     function onKeyDown(e) {
       if (success || successMembresia || tab !== 'productos' || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (document.activeElement === searchInputRef.current) return;
+      // Cualquier campo de texto enfocado (busqueda de producto, cliente, monto...)
+      // maneja su propio Enter -- el listener global solo debe actuar cuando el foco
+      // esta "suelto" (nada que escriba), si no compite con el campo Cliente/QR de abajo.
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
       const now = Date.now();
       if (e.key === 'Enter') {
@@ -395,26 +425,41 @@ export default function VentaPos() {
       </div>
 
       {tab === 'membresias' ? (
-        <div className="grid lg:grid-cols-3 gap-4">
+        <div>
+          {!corteAbierto && (
+            <div className="bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg px-4 py-3 mb-4">
+              ⚠️ No hay corte de caja abierto. Debes <Link to="/cortes-caja" className="underline font-semibold">abrir un corte</Link> antes de poder registrar una membresía.
+            </div>
+          )}
+          <div className="grid lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
             <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
-              {planes.map((p) => (
-                <button
-                  type="button"
-                  key={p.id}
-                  onClick={() => setPlanSeleccionado(p)}
-                  className={'card text-left transition-all ' + (planSeleccionado?.id === p.id ? 'ring-2 ring-brand-500' : 'hover:shadow-md')}
-                >
-                  <h3 className="font-semibold text-gray-800">{p.nombre}</h3>
-                  <p className="text-2xl font-bold text-brand-700 my-1">${Number(p.precio).toFixed(2)}</p>
-                  <p className="text-xs text-gray-500">
-                    {p.tipoPlan === 'PERIODO' && `${p.duracionCantidad} ${p.duracionUnidad?.toLowerCase()}(s)`}
-                    {p.tipoPlan === 'POR_CLASES' && `${p.numeroClasesIncluidas} clases`}
-                    {p.tipoPlan === 'PASE' && '1 clase individual'}
-                    {p.tipoPlan === 'PERSONALIZADO' && 'Personalizado'}
-                  </p>
-                </button>
-              ))}
+              {planes.map((p) => {
+                const lleno = planLleno(p);
+                return (
+                  <button
+                    type="button"
+                    key={p.id}
+                    onClick={() => seleccionarPlanPos(p)}
+                    className={
+                      'card text-left transition-all ' +
+                      (lleno ? 'opacity-50 cursor-not-allowed' : planSeleccionado?.id === p.id ? 'ring-2 ring-brand-500' : 'hover:shadow-md')
+                    }
+                  >
+                    <h3 className="font-semibold text-gray-800">{p.nombre}</h3>
+                    <p className="text-2xl font-bold text-brand-700 my-1">${Number(p.precio).toFixed(2)}</p>
+                    <p className="text-xs text-gray-500">
+                      {p.tipoPlan === 'PERIODO' && `${p.duracionCantidad} ${p.duracionUnidad?.toLowerCase()}(s)`}
+                      {p.tipoPlan === 'POR_CLASES' && `${p.numeroClasesIncluidas} clases`}
+                      {p.tipoPlan === 'PASE' && '1 clase individual'}
+                      {p.tipoPlan === 'PERSONALIZADO' && 'Personalizado'}
+                    </p>
+                    {textoCupo(p) && (
+                      <p className={'text-xs mt-1 font-medium ' + (lleno ? 'text-red-500' : 'text-emerald-600')}>{textoCupo(p)}</p>
+                    )}
+                  </button>
+                );
+              })}
               {planes.length === 0 && <p className="text-sm text-gray-500">Aun no hay planes de membresia activos.</p>}
             </div>
           </div>
@@ -426,24 +471,21 @@ export default function VentaPos() {
                 <div>
                   <p className="font-medium text-gray-800">{planSeleccionado.nombre}</p>
                   <p className="text-2xl font-bold text-brand-700 my-1">${Number(planSeleccionado.precio).toFixed(2)}</p>
-                  <p className="text-xs text-gray-500">
-                    {planSeleccionado.tipoPlan === 'PERIODO' && `Vigencia: ${planSeleccionado.duracionCantidad} ${planSeleccionado.duracionUnidad?.toLowerCase()}(s)`}
-                    {planSeleccionado.tipoPlan === 'POR_CLASES' && `${planSeleccionado.numeroClasesIncluidas} clases incluidas`}
-                    {planSeleccionado.tipoPlan === 'PASE' && '1 clase individual'}
-                    {planSeleccionado.tipoPlan === 'PERSONALIZADO' && 'Plan personalizado'}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {planSeleccionado.accesoCompleto ? 'Acceso a todas las disciplinas' : (planSeleccionado.disciplinaNombres?.join(', ') || 'Sin disciplinas asignadas')}
-                  </p>
-                  {planSeleccionado.permiteAbonos && (
-                    <p className="text-xs text-emerald-600 mt-1">Permite abonos{planSeleccionado.montoMinimoAbono ? ` (min. $${Number(planSeleccionado.montoMinimoAbono).toFixed(2)})` : ''}</p>
+                  <p className="text-xs text-gray-500">{describirPlan(planSeleccionado)}</p>
+                  {textoCupo(planSeleccionado) && (
+                    <p className={'text-xs mt-1 font-medium ' + (planLleno(planSeleccionado) ? 'text-red-500' : 'text-emerald-600')}>
+                      {textoCupo(planSeleccionado)}
+                    </p>
                   )}
                 </div>
-                <button className="btn-primary w-full" onClick={() => setModalRegistrarMembresia(true)}>Registrar membresia</button>
+                <button className="btn-primary w-full" disabled={planLleno(planSeleccionado) || !corteAbierto} onClick={() => setModalRegistrarMembresia(true)}>
+                  {planLleno(planSeleccionado) ? 'Cupo lleno' : !corteAbierto ? 'Abre un corte primero' : 'Registrar membresia'}
+                </button>
               </>
             ) : (
               <p className="text-sm text-gray-400">Selecciona un plan de la lista para ver su informacion.</p>
             )}
+          </div>
           </div>
         </div>
       ) : (
@@ -630,8 +672,9 @@ export default function VentaPos() {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Cliente (opcional)</label>
-          <input className="input" placeholder="Nombre del cliente" value={clienteNombre} onChange={(e) => setClienteNombre(e.target.value)} />
+          <label className="block text-xs font-medium text-gray-600 mb-1">Cliente (opcional, o escanea su QR)</label>
+          <input className="input" placeholder="Nombre del cliente o escanea su QR" value={clienteNombre}
+            onChange={(e) => setClienteNombre(e.target.value)} onKeyDown={handleClienteKeyDown} />
         </div>
 
         <div>

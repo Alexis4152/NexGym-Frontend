@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as membresiasApi from '../api/membresias';
+import * as cortesCajaApi from '../api/cortesCaja';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
@@ -26,11 +27,16 @@ export default function Membresias() {
   const [page, setPage] = useState(0);
   const [modalAsignar, setModalAsignar] = useState(false);
   const [modalMotivo, setModalMotivo] = useState(null); // { id, motivo }
+  const [corteAbierto, setCorteAbierto] = useState(null);
   const { notify } = useNotify();
 
   useEffect(() => {
     membresiasApi.listMembresias(page, 20).then(({ data }) => setPageData(data.data));
   }, [page]);
+
+  useEffect(() => {
+    cortesCajaApi.getCorteAbierto().then(({ data }) => setCorteAbierto(data.data));
+  }, []);
 
   function reloadMembresias() {
     membresiasApi.listMembresias(page, 20).then(({ data }) => setPageData(data.data));
@@ -62,8 +68,14 @@ export default function Membresias() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-gray-800">Membresias</h1>
-        <button className="btn-primary" onClick={() => setModalAsignar(true)}>+ Registrar membresia</button>
+        <button className="btn-primary" disabled={!corteAbierto} onClick={() => setModalAsignar(true)}>+ Registrar membresia</button>
       </div>
+
+      {!corteAbierto && (
+        <div className="bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg px-4 py-3 mb-4">
+          ⚠️ No hay corte de caja abierto. Debes <Link to="/cortes-caja" className="underline font-semibold">abrir un corte</Link> antes de poder registrar una membresía.
+        </div>
+      )}
 
       <div className="card overflow-x-auto">
           <table className="w-full text-sm">

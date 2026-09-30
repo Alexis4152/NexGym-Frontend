@@ -5,6 +5,14 @@ import Modal from '../components/Modal.jsx';
 
 const emptyForm = { nombre: '', descripcion: '', icono: '', color: '#1c6690', modalidad: 'CLASES', limiteAlumnos: '', requiereInstalacion: true };
 
+// Set curado para elegir de un vistazo; el campo de texto de al lado sigue libre por
+// si quieren pegar otro emoji distinto (ej. desde el selector de emoji del sistema).
+const ICONOS_SUGERIDOS = [
+  '🥊', '🤼', '🥋', '🧘', '🏋️', '🤸', '🤾', '🏊', '🚴', '🏃',
+  '🧗', '🤺', '⚽', '🏀', '🏐', '🎾', '🏓', '🏸', '⛹️', '🥅',
+  '🏹', '🤹', '🚵', '🏄', '🤽', '🎽', '🥇', '💪', '❤️‍🔥', '🏅',
+];
+
 export default function Disciplinas() {
   const [items, setItems] = useState([]);
   const [modal, setModal] = useState(null); // null | { editing }
@@ -139,11 +147,27 @@ export default function Disciplinas() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Icono (emoji)</label>
                 <input
-                  className="input"
+                  className="input mb-2"
                   value={form.icono}
                   onChange={(e) => setForm({ ...form, icono: e.target.value })}
                   placeholder="🥊"
                 />
+                <div className="flex flex-wrap gap-1">
+                  {ICONOS_SUGERIDOS.map((icono) => (
+                    <button
+                      type="button"
+                      key={icono}
+                      onClick={() => setForm({ ...form, icono })}
+                      className={
+                        'w-8 h-8 flex items-center justify-center rounded-lg border text-lg leading-none ' +
+                        (form.icono === icono ? 'border-brand-500 ring-1 ring-brand-500 bg-brand-50' : 'border-gray-200 hover:border-brand-300')
+                      }
+                      title={icono}
+                    >
+                      {icono}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>

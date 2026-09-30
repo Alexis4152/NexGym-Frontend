@@ -4,6 +4,12 @@ import * as alumnosApi from '../api/alumnos';
 import * as disciplinasApi from '../api/disciplinas';
 import { useNotify } from '../context/NotifyContext.jsx';
 
+// Un QR/codigo de barras leido por un lector fisico se "escribe" completo y termina
+// en Enter; un nombre tecleado a mano nunca llega a esta longitud, asi que solo ahi
+// vale la pena intentar la busqueda por QR (evita un aviso de error en cada Enter
+// accidental de una busqueda por nombre normal).
+const LARGO_MINIMO_QR = 20;
+
 export default function Asistencia() {
   const [q, setQ] = useState('');
   const [resultados, setResultados] = useState([]);
@@ -41,6 +47,16 @@ export default function Asistencia() {
     }
   }
 
+  async function handleKeyDown(e) {
+    if (e.key !== 'Enter' || q.trim().length < LARGO_MINIMO_QR) return;
+    try {
+      const { data } = await alumnosApi.buscarAlumnoPorQr(q.trim());
+      await registrar(data.data);
+    } catch {
+      notify('Ningun alumno tiene ese codigo QR', 'error');
+    }
+  }
+
   return (
     <div>
       <h1 className="text-xl font-bold text-gray-800 mb-6">Asistencia</h1>
@@ -52,8 +68,9 @@ export default function Asistencia() {
           {disciplinas.map((d) => <option key={d.id} value={d.id}>{d.nombre}</option>)}
         </select>
 
-        <label className="block text-sm font-medium text-gray-700 mb-1">Buscar alumno para pasar lista</label>
-        <input className="input" placeholder="Nombre del alumno..." value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+        <label className="block text-sm font-medium text-gray-700 mb-1">Buscar alumno para pasar lista (o escanea su QR)</label>
+        <input className="input" placeholder="Nombre del alumno o escanea su QR..." value={q}
+          onChange={(e) => setQ(e.target.value)} onKeyDown={handleKeyDown} autoFocus />
 
         {resultados.length > 0 && (
           <div className="mt-2 divide-y divide-gray-100 border border-gray-200 rounded-lg">
