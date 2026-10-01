@@ -1,13 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import * as publicApi from '../api/public';
 import { applyBrandColor } from '../utils/theme';
+import { describirPlan, planLleno, textoCupo } from '../utils/planes';
 
 export default function PublicApartar() {
   const { slug } = useParams();
   const [centro, setCentro] = useState(null);
   const [productos, setProductos] = useState([]);
+  const [planes, setPlanes] = useState([]);
   const [status, setStatus] = useState('loading'); // loading | ok | not-found
+  const [tab, setTab] = useState('productos'); // productos | planes -- por defecto entra a la tienda
+  const [busqueda, setBusqueda] = useState('');
+  const [categoriaSel, setCategoriaSel] = useState(null); // null = "Todas"
   const [cart, setCart] = useState([]);
   const [clienteNombre, setClienteNombre] = useState('');
   const [clienteTelefono, setClienteTelefono] = useState('');
@@ -21,15 +26,33 @@ export default function PublicApartar() {
   const [imagenActiva, setImagenActiva] = useState({});
 
   useEffect(() => {
-    Promise.all([publicApi.getPublicCentro(slug), publicApi.getPublicApartables(slug)])
-      .then(([centroRes, productosRes]) => {
+    Promise.all([publicApi.getPublicCentro(slug), publicApi.getPublicApartables(slug), publicApi.getPublicPlanes(slug)])
+      .then(([centroRes, productosRes, planesRes]) => {
         setCentro(centroRes.data.data);
         applyBrandColor(centroRes.data.data.colorPrimario);
         setProductos(productosRes.data.data);
+        setPlanes(planesRes.data.data);
         setStatus('ok');
       })
       .catch(() => setStatus('not-found'));
   }, [slug]);
+
+  // Categorias distintas presentes en los productos cargados, para armar los chips de
+  // filtro (patron de DemoPV) sin depender de un endpoint de categorias aparte.
+  const categorias = useMemo(() => {
+    const set = new Set();
+    productos.forEach((p) => (p.categoriaNombres || []).forEach((c) => set.add(c)));
+    return [...set].sort();
+  }, [productos]);
+
+  const productosFiltrados = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    return productos.filter((p) => {
+      const coincideCategoria = !categoriaSel || (p.categoriaNombres || []).includes(categoriaSel);
+      const coincideBusqueda = !q || p.nombre.toLowerCase().includes(q);
+      return coincideCategoria && coincideBusqueda;
+    });
+  }, [productos, busqueda, categoriaSel]);
 
   function agregar(producto) {
     setCart((prev) => {
@@ -122,14 +145,85 @@ export default function PublicApartar() {
         <p className="text-brand-100 text-sm mt-1">Aparta tus productos — pagas al recogerlos en la tienda</p>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8 grid lg:grid-cols-3 gap-6">
+      <main className="max-w-5xl mx-auto px-4 py-8">
+        <div className="flex gap-6 border-b border-gray-200 mb-6 text-sm">
+          <button
+            type="button"
+            className={'pb-2 ' + (tab === 'productos' ? 'border-b-2 border-brand-600 text-brand-700 font-medium' : 'text-gray-500')}
+            onClick={() => setTab('productos')}
+          >
+            🛍️ Productos
+          </button>
+          <button
+            type="button"
+            className={'pb-2 ' + (tab === 'planes' ? 'border-b-2 border-brand-600 text-brand-700 font-medium' : 'text-gray-500')}
+            onClick={() => setTab('planes')}
+          >
+            📋 Planes
+          </button>
+        </div>
+
+        {tab === 'planes' ? (
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">Planes de membresia</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Conoce las opciones disponibles — para contratar un plan visitanos en el centro.
+            </p>
+            {planes.length === 0 ? (
+              <p className="text-sm text-gray-500">Aun no hay planes publicados.</p>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {planes.map((p) => (
+                  <div key={p.id} className="card">
+                    <p className="font-semibold text-gray-800">{p.nombre}</p>
+                    <p className="text-brand-700 font-bold text-lg mt-1">${Number(p.precio).toFixed(2)}</p>
+                    <p className="text-xs text-gray-500 mt-2">{describirPlan(p)}</p>
+                    {textoCupo(p) && (
+                      <p className={'text-xs mt-2 font-medium ' + (planLleno(p) ? 'text-red-600' : 'text-gray-500')}>
+                        {textoCupo(p)}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+        <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Productos disponibles para apartar</h2>
-          {productos.length === 0 ? (
-            <p className="text-sm text-gray-500">Aun no hay productos disponibles para apartar.</p>
+          <input
+            className="input mb-3"
+            placeholder="🔍 Buscar producto por nombre..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+          {categorias.length > 0 && (
+            <div className="flex gap-2 mb-4 flex-wrap">
+              <button
+                type="button"
+                className={'px-3 py-1.5 rounded-full text-xs font-medium border ' + (categoriaSel === null ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-brand-700 border-brand-200')}
+                onClick={() => setCategoriaSel(null)}
+              >
+                Todas
+              </button>
+              {categorias.map((c) => (
+                <button
+                  type="button"
+                  key={c}
+                  className={'px-3 py-1.5 rounded-full text-xs font-medium border ' + (categoriaSel === c ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-brand-700 border-brand-200')}
+                  onClick={() => setCategoriaSel(c)}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
+          {productosFiltrados.length === 0 ? (
+            <p className="text-sm text-gray-500">Ningun producto coincide con tu busqueda.</p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {productos.map((p) => {
+              {productosFiltrados.map((p) => {
                 const fotos = p.imagenes?.length ? p.imagenes : (p.imagenUrl ? [p.imagenUrl] : []);
                 const indice = Math.min(imagenActiva[p.id] || 0, fotos.length - 1);
                 return (
@@ -224,6 +318,8 @@ export default function PublicApartar() {
             </button>
           </form>
         </div>
+        </div>
+        )}
       </main>
     </div>
   );
