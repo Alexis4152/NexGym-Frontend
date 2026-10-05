@@ -3,11 +3,13 @@ import api from './axios';
 export const listCategoriasInventario = () => api.get('/inventario/categorias');
 export const createCategoriaInventario = (data) => api.post('/inventario/categorias', data);
 
-export const listArticulos = (q = '', page = 0, size = 20, categoriaId = '', soloStockBajo = false) =>
-  api.get('/inventario/articulos', { params: { q: q || undefined, categoriaId: categoriaId || undefined, soloStockBajo, page, size } });
-export const listStockBajo = () => api.get('/inventario/articulos/stock-bajo');
+export const listArticulos = (q = '', page = 0, size = 20, categoriaId = '', soloStockBajo = false, sucursalId = '') =>
+  api.get('/inventario/articulos', { params: { q: q || undefined, categoriaId: categoriaId || undefined, soloStockBajo, sucursalId: sucursalId || undefined, page, size } });
+export const listStockBajo = (sucursalId = '') => api.get('/inventario/articulos/stock-bajo', { params: { sucursalId: sucursalId || undefined } });
 export const buscarArticuloPorCodigoBarras = (codigo) =>
   api.get(`/inventario/articulos/por-codigo/${encodeURIComponent(codigo)}`);
+export const buscarEnOtrasSucursales = (q) =>
+  api.get('/inventario/articulos/otras-sucursales', { params: { q } });
 export const createArticulo = (data) => api.post('/inventario/articulos', data);
 export const updateArticulo = (id, data) => api.put(`/inventario/articulos/${id}`, data);
 export const deactivateArticulo = (id) => api.delete(`/inventario/articulos/${id}`);

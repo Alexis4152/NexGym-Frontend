@@ -136,6 +136,9 @@ export default function Notificaciones() {
               <div className={n.leida ? 'ml-3.5' : ''}>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{TIPO_LABEL[n.tipo] || n.tipo}</span>
+                  {n.sucursalNombre && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-50 text-brand-700">{n.sucursalNombre}</span>
+                  )}
                   <span className="text-xs text-gray-400">{new Date(n.createdAt).toLocaleString('es-MX')}</span>
                 </div>
                 <p className="text-sm font-medium text-gray-800 mt-1">{n.titulo}</p>

@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import * as inventarioApi from '../api/inventario';
 import * as disciplinasApi from '../api/disciplinas';
+import * as sucursalesApi from '../api/sucursales';
 import { useNotify } from '../context/NotifyContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
 
 const emptyForm = {
-  categoriaIds: [], nombre: '', tipo: 'EQUIPO', codigoBarras: '', stock: 0, stockMinimo: 0,
+  sucursalId: '', categoriaIds: [], nombre: '', tipo: 'EQUIPO', codigoBarras: '', stock: 0, stockMinimo: 0,
   costo: '', precioVenta: '', vendible: false, reservable: false, descuentoApartadoPorcentaje: '',
   disciplinaIds: [],
 };
@@ -20,6 +21,8 @@ export default function Inventario() {
   const [q, setQ] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState('');
   const [soloStockBajo, setSoloStockBajo] = useState(false);
+  const [sucursalFiltro, setSucursalFiltro] = useState('');
+  const [sucursales, setSucursales] = useState([]);
   const [scanCode, setScanCode] = useState('');
   const [categorias, setCategorias] = useState([]);
   const [disciplinas, setDisciplinas] = useState([]);
@@ -31,25 +34,47 @@ export default function Inventario() {
   const [ajusteDelta, setAjusteDelta] = useState(1);
   const [ajusteRazon, setAjusteRazon] = useState('');
   const [nuevaCategoria, setNuevaCategoria] = useState('');
+  const [modalOtrasSucursales, setModalOtrasSucursales] = useState(null);
+  const [buscandoOtrasSucursales, setBuscandoOtrasSucursales] = useState(false);
   const { notify, confirmDialog } = useNotify();
-  const { hasPermiso } = useAuth();
+  const { hasPermiso, isSupervisor, isSuperAdmin } = useAuth();
   const puedeCrear = hasPermiso('INVENTARIO_CREAR');
   const puedeEditar = hasPermiso('INVENTARIO_EDITAR');
   const puedeAjustar = hasPermiso('INVENTARIO_ENTRADA') || hasPermiso('INVENTARIO_AJUSTE_NEGATIVO');
+  // Solo un Dueno/SUPER_ADMIN ve todas las sucursales a la vez (ver TenantScope#sucursalesPermitidas):
+  // un Encargado/Recepcion ya queda limitado a la suya por su sesion, sin necesitar este filtro.
+  const veTodasLasSucursales = isSupervisor || isSuperAdmin;
 
   useEffect(() => {
     loadCategorias();
     disciplinasApi.listDisciplinasActivas().then(({ data }) => setDisciplinas(data.data));
+    if (veTodasLasSucursales) {
+      sucursalesApi.listSucursalesActivas().then(({ data }) => setSucursales(data.data));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, page, categoriaFiltro, soloStockBajo]);
+  }, [q, page, categoriaFiltro, soloStockBajo, sucursalFiltro]);
 
   function load() {
-    inventarioApi.listArticulos(q, page, 20, categoriaFiltro, soloStockBajo).then(({ data }) => setPageData(data.data));
+    inventarioApi.listArticulos(q, page, 20, categoriaFiltro, soloStockBajo, sucursalFiltro).then(({ data }) => setPageData(data.data));
+  }
+
+  async function handleBuscarOtrasSucursales(a) {
+    setBuscandoOtrasSucursales(true);
+    setModalOtrasSucursales({ nombre: a.nombre, resultados: null });
+    try {
+      const { data } = await inventarioApi.buscarEnOtrasSucursales(a.nombre);
+      setModalOtrasSucursales({ nombre: a.nombre, resultados: data.data });
+    } catch {
+      setModalOtrasSucursales({ nombre: a.nombre, resultados: [] });
+    } finally {
+      setBuscandoOtrasSucursales(false);
+    }
   }
 
   async function handleScan(e) {
@@ -76,12 +101,13 @@ export default function Inventario() {
   }
 
   function openCreate() {
-    setForm(emptyForm);
+    setForm({ ...emptyForm, sucursalId: sucursalFiltro || '' });
     setImagenes([]);
     setModal({ editing: null });
   }
   function openEdit(a) {
     setForm({
+      sucursalId: a.sucursalId || '',
       categoriaIds: a.categoriaIds ? [...a.categoriaIds] : [], nombre: a.nombre, tipo: a.tipo, codigoBarras: a.codigoBarras || '',
       stock: a.stock, stockMinimo: a.stockMinimo, costo: a.costo ?? '', precioVenta: a.precioVenta ?? '',
       vendible: a.vendible, reservable: a.reservable, descuentoApartadoPorcentaje: a.descuentoApartadoPorcentaje ?? '',
@@ -113,8 +139,13 @@ export default function Inventario() {
       notify('El nombre es obligatorio', 'error');
       return;
     }
+    if (!modal.editing && veTodasLasSucursales && !form.sucursalId) {
+      notify('Selecciona la sucursal para este articulo', 'error');
+      return;
+    }
     const payload = {
       ...form,
+      sucursalId: form.sucursalId || null,
       stock: Number(form.stock),
       stockMinimo: Number(form.stockMinimo),
       costo: form.costo === '' ? null : Number(form.costo),
@@ -215,6 +246,12 @@ export default function Inventario() {
           <option value="">Todas las categorias</option>
           {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
         </select>
+        {veTodasLasSucursales && (
+          <select className="input w-52" value={sucursalFiltro} onChange={(e) => { setPage(0); setSucursalFiltro(e.target.value); }}>
+            <option value="">Todas las sucursales</option>
+            {sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+          </select>
+        )}
         <button
           type="button"
           className={'px-3 py-2 rounded-lg text-sm font-medium border transition-colors ' +
@@ -223,8 +260,8 @@ export default function Inventario() {
         >
           ⚠️ Stock bajo
         </button>
-        {(q || categoriaFiltro || soloStockBajo) && (
-          <button type="button" className="btn-secondary text-sm" onClick={() => { setPage(0); setQ(''); setCategoriaFiltro(''); setSoloStockBajo(false); }}>
+        {(q || categoriaFiltro || soloStockBajo || sucursalFiltro) && (
+          <button type="button" className="btn-secondary text-sm" onClick={() => { setPage(0); setQ(''); setCategoriaFiltro(''); setSoloStockBajo(false); setSucursalFiltro(''); }}>
             Limpiar filtros
           </button>
         )}
@@ -235,6 +272,7 @@ export default function Inventario() {
           <thead>
             <tr className="text-left text-gray-500 border-b border-gray-100">
               <th className="py-2">Articulo</th>
+              {veTodasLasSucursales && <th>Sucursal</th>}
               <th>Tipo</th>
               <th>Disciplinas</th>
               <th>Stock</th>
@@ -247,12 +285,16 @@ export default function Inventario() {
             {pageData.content.map((a) => (
               <tr key={a.id} className={'border-b border-gray-50 ' + (a.stock <= a.stockMinimo ? 'bg-red-50/50' : '')}>
                 <td className="py-2 font-medium text-gray-800">{a.nombre}</td>
+                {veTodasLasSucursales && <td className="text-gray-600">{a.sucursalNombre}</td>}
                 <td className="text-gray-600">{a.tipo}</td>
                 <td className="text-gray-600">{a.disciplinaNombres?.join(', ') || '-'}</td>
                 <td className={a.stock <= a.stockMinimo ? 'text-red-600 font-medium' : 'text-gray-700'}>{a.stock}</td>
                 <td>{a.vendible ? <span className="text-emerald-600">Si · ${a.precioVenta ?? 0}</span> : <span className="text-gray-400">No</span>}</td>
                 <td>{a.reservable ? <span className="text-emerald-600">Si</span> : <span className="text-gray-400">No</span>}</td>
-                <td className="text-right space-x-2">
+                <td className="text-right space-x-2 whitespace-nowrap">
+                  {!veTodasLasSucursales && a.stock === 0 && (
+                    <button className="text-amber-600 hover:underline" onClick={() => handleBuscarOtrasSucursales(a)}>Buscar en otras sucursales</button>
+                  )}
                   {puedeAjustar && <button className="text-brand-600 hover:underline" onClick={() => setModalAjuste(a)}>Ajustar</button>}
                   {puedeEditar && <button className="text-brand-600 hover:underline" onClick={() => openEdit(a)}>Editar</button>}
                   {puedeEditar && <button className="text-red-600 hover:underline" onClick={() => handleDeactivate(a)}>Desactivar</button>}
@@ -260,7 +302,7 @@ export default function Inventario() {
               </tr>
             ))}
             {pageData.content.length === 0 && (
-              <tr><td colSpan={7} className="py-6 text-center text-gray-400">Sin resultados</td></tr>
+              <tr><td colSpan={veTodasLasSucursales ? 8 : 7} className="py-6 text-center text-gray-400">Sin resultados</td></tr>
             )}
           </tbody>
         </table>
@@ -270,6 +312,18 @@ export default function Inventario() {
       {modal && (
         <Modal title={modal.editing ? 'Editar articulo' : 'Nuevo articulo'} onClose={() => setModal(null)} wide>
           <form onSubmit={handleSubmit} className="space-y-3">
+            {modal.editing && veTodasLasSucursales && (
+              <p className="text-xs text-gray-500">Sucursal: <strong>{form.sucursalId ? sucursales.find((s) => String(s.id) === String(form.sucursalId))?.nombre : '-'}</strong> (no se puede cambiar de sucursal)</p>
+            )}
+            {!modal.editing && veTodasLasSucursales && !sucursalFiltro && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Sucursal</label>
+                <select className="input" value={form.sucursalId} onChange={(e) => setForm({ ...form, sucursalId: e.target.value })}>
+                  <option value="">Selecciona una sucursal...</option>
+                  {sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                </select>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
@@ -402,6 +456,26 @@ export default function Inventario() {
             <p className="text-sm text-gray-600">Nuevo stock: <strong>{modalAjuste.stock + Number(ajusteDelta || 0)}</strong></p>
             <button className="btn-primary w-full">Aplicar ajuste</button>
           </form>
+        </Modal>
+      )}
+
+      {modalOtrasSucursales && (
+        <Modal title={`"${modalOtrasSucursales.nombre}" en otras sucursales`} onClose={() => setModalOtrasSucursales(null)}>
+          <p className="text-xs text-gray-500 mb-3">Solo informativo -- no se puede vender ni ajustar desde aqui, pasa por esa sucursal para recogerlo.</p>
+          {buscandoOtrasSucursales ? (
+            <p className="text-sm text-gray-400">Buscando...</p>
+          ) : modalOtrasSucursales.resultados?.length ? (
+            <div className="space-y-2">
+              {modalOtrasSucursales.resultados.map((r) => (
+                <div key={r.articuloId} className="flex items-center justify-between text-sm border-b border-gray-50 pb-2">
+                  <span className="text-gray-700">{r.sucursalNombre}</span>
+                  <span className="text-emerald-600 font-medium">{r.stock} en existencia</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">Ninguna otra sucursal tiene existencia de este articulo.</p>
+          )}
         </Modal>
       )}
     </div>

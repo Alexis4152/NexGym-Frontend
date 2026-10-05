@@ -169,6 +169,18 @@ export default function CentroInfo() {
           </div>
         </div>
 
+        <hr className="border-gray-100" />
+        <h2 className="font-semibold text-gray-800">Caja</h2>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Cierre automatico de cortes (hora)</label>
+          <input type="time" className="input w-40" value={form.horaCierreAutomaticoCorte ? form.horaCierreAutomaticoCorte.slice(0, 5) : ''}
+            onChange={(e) => setForm({ ...form, horaCierreAutomaticoCorte: e.target.value || null })} />
+          <p className="text-xs text-gray-400 mt-1">
+            Si al llegar esta hora alguien dejo un corte de caja abierto, el sistema lo cierra solo (sin gastos, marcado como "Sistema").
+            Vacio = desactivado.
+          </p>
+        </div>
+
         <button className="btn-primary w-full mt-2">Guardar cambios</button>
       </form>
     </div>

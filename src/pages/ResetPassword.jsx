@@ -9,6 +9,7 @@ export default function ResetPassword() {
   // prefirio copiar el codigo a mano, el campo sigue editable igual que antes.
   const [token, setToken] = useState(() => searchParams.get('token') || '');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { notify } = useNotify();
   const navigate = useNavigate();
@@ -17,6 +18,10 @@ export default function ResetPassword() {
     e.preventDefault();
     if (newPassword.length < 8) {
       notify('La contrasena debe tener al menos 8 caracteres', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      notify('Las contrasenas no coinciden', 'error');
       return;
     }
     setLoading(true);
@@ -43,6 +48,13 @@ export default function ResetPassword() {
           className="input mb-4"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
+        />
+        <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar contrasena</label>
+        <input
+          type="password"
+          className="input mb-4"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
         />
         <button className="btn-primary w-full" disabled={loading}>
           {loading ? 'Guardando...' : 'Restablecer'}

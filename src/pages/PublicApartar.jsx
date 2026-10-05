@@ -4,6 +4,12 @@ import * as publicApi from '../api/public';
 import { applyBrandColor } from '../utils/theme';
 import { describirPlan, planLleno, textoCupo } from '../utils/planes';
 
+// Busqueda por texto en Google Maps (no se guardan coordenadas, solo la direccion de la
+// sucursal) -- funciona igual de bien con una direccion parcial que con una completa.
+function googleMapsUrl(direccion) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}`;
+}
+
 export default function PublicApartar() {
   const { slug } = useParams();
   const [centro, setCentro] = useState(null);
@@ -24,6 +30,9 @@ export default function PublicApartar() {
   // indice de la foto que se muestra por producto (hasta 3, ver p.imagenes), para poder
   // hojearlas sin salir de la cuadricula de tarjetas.
   const [imagenActiva, setImagenActiva] = useState({});
+  // sucursal elegida por producto (p.id -> sucursalId), para apartarlo en esa sucursal
+  // especifica -- cada sucursal tiene su propio inventario (ver p.sucursales).
+  const [sucursalSel, setSucursalSel] = useState({});
 
   useEffect(() => {
     Promise.all([publicApi.getPublicCentro(slug), publicApi.getPublicApartables(slug), publicApi.getPublicPlanes(slug)])
@@ -54,14 +63,27 @@ export default function PublicApartar() {
     });
   }, [productos, busqueda, categoriaSel]);
 
+  // La sucursal activa de la tarjeta: la que el cliente eligio, o por defecto la primera
+  // con existencia (p.sucursales ya viene ordenado con esas primero, ver backend).
+  function sucursalElegida(producto) {
+    const elegidaId = sucursalSel[producto.id];
+    const sucs = producto.sucursales || [];
+    return sucs.find((s) => s.sucursalId === elegidaId) || sucs.find((s) => s.stock > 0) || sucs[0];
+  }
+
   function agregar(producto) {
+    const suc = sucursalElegida(producto);
+    if (!suc || suc.stock === 0) return;
     setCart((prev) => {
-      const existente = prev.find((i) => i.articuloId === producto.id);
+      const existente = prev.find((i) => i.articuloId === suc.articuloId);
       if (existente) {
-        if (existente.cantidad >= producto.stock) return prev;
-        return prev.map((i) => (i.articuloId === producto.id ? { ...i, cantidad: i.cantidad + 1 } : i));
+        if (existente.cantidad >= suc.stock) return prev;
+        return prev.map((i) => (i.articuloId === suc.articuloId ? { ...i, cantidad: i.cantidad + 1 } : i));
       }
-      return [...prev, { articuloId: producto.id, nombre: producto.nombre, precio: producto.precioConDescuento, stock: producto.stock, cantidad: 1 }];
+      return [...prev, {
+        articuloId: suc.articuloId, nombre: producto.nombre, sucursalNombre: suc.sucursalNombre,
+        sucursalDireccion: suc.sucursalDireccion, precio: producto.precioConDescuento, stock: suc.stock, cantidad: 1,
+      }];
     });
   }
 
@@ -226,6 +248,7 @@ export default function PublicApartar() {
               {productosFiltrados.map((p) => {
                 const fotos = p.imagenes?.length ? p.imagenes : (p.imagenUrl ? [p.imagenUrl] : []);
                 const indice = Math.min(imagenActiva[p.id] || 0, fotos.length - 1);
+                const suc = sucursalElegida(p);
                 return (
                 <div key={p.id} className="card">
                   <div className="aspect-square bg-gray-100 rounded-lg mb-1 overflow-hidden flex items-center justify-center">
@@ -255,8 +278,42 @@ export default function PublicApartar() {
                       <p className="text-xs text-gray-400 line-through">${Number(p.precioVenta).toFixed(2)}</p>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400 mb-2">Disponibles: {p.stock}</p>
-                  <button type="button" className="btn-secondary text-xs w-full" onClick={() => agregar(p)}>
+                  {p.sucursales?.length > 1 && (
+                    <div className="flex flex-wrap gap-1 my-2">
+                      {p.sucursales.map((s) => (
+                        <button
+                          type="button"
+                          key={s.sucursalId}
+                          disabled={s.stock === 0}
+                          onClick={() => setSucursalSel((prev) => ({ ...prev, [p.id]: s.sucursalId }))}
+                          title={s.stock === 0 ? 'Sin stock disponible' : undefined}
+                          className={'px-2 py-0.5 rounded-full text-[10px] font-medium border ' +
+                            (s.stock === 0
+                              ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                              : suc?.sucursalId === s.sucursalId
+                                ? 'bg-brand-600 text-white border-brand-600'
+                                : 'bg-white text-brand-700 border-brand-200')}
+                        >
+                          {s.sucursalNombre}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-400 mb-1">
+                    {suc?.sucursalNombre ? `${suc.sucursalNombre} — ` : ''}
+                    {suc?.stock > 0 ? `Disponibles: ${suc.stock}` : 'Sin stock disponible'}
+                  </p>
+                  {suc?.sucursalDireccion && (
+                    <a
+                      href={googleMapsUrl(suc.sucursalDireccion)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-brand-600 hover:underline block mb-2"
+                    >
+                      📍 Ver en Google Maps
+                    </a>
+                  )}
+                  <button type="button" className="btn-secondary text-xs w-full" disabled={!suc || suc.stock === 0} onClick={() => agregar(p)}>
                     + Apartar
                   </button>
                 </div>
@@ -276,6 +333,14 @@ export default function PublicApartar() {
                 <div key={i.articuloId} className="flex items-center justify-between text-sm">
                   <div>
                     <p className="text-gray-800">{i.nombre}</p>
+                    {i.sucursalNombre && (
+                      <p className="text-[10px] text-gray-400">
+                        Recoger en: {i.sucursalNombre}
+                        {i.sucursalDireccion && (
+                          <> · <a href={googleMapsUrl(i.sucursalDireccion)} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">ver mapa</a></>
+                        )}
+                      </p>
+                    )}
                     <div className="flex items-center gap-1 mt-1">
                       <button type="button" className="w-5 h-5 rounded bg-gray-100" onClick={() => cambiarCantidad(i.articuloId, i.cantidad - 1)}>-</button>
                       <span className="text-xs w-5 text-center">{i.cantidad}</span>
