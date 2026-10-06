@@ -88,26 +88,18 @@ export default function CentroInfo() {
         </div>
 
         <hr className="border-gray-100" />
-        <h2 className="font-semibold text-gray-800">Tienda publica</h2>
+        <h2 className="font-semibold text-gray-800">Tienda de apartados</h2>
         <label className="flex items-center gap-2 text-sm text-gray-700">
-          <input type="checkbox" checked={form.catalogoPublicoActivo} onChange={(e) => setForm({ ...form, catalogoPublicoActivo: e.target.checked })} />
-          Habilitar catalogo publico compartible
+          <input type="checkbox" checked={form.apartadosActivo} onChange={(e) => setForm({ ...form, apartadosActivo: e.target.checked })} />
+          Habilitar tienda de apartados publica
         </label>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Enlace publico (slug)</label>
           <input className="input" value={form.slugPublico || ''} onChange={(e) => setForm({ ...form, slugPublico: e.target.value })} placeholder="mi-gimnasio" />
-          <p className="text-xs text-gray-400 mt-1">{window.location.origin}/tienda/{form.slugPublico || '...'}</p>
+          {form.apartadosActivo && (
+            <p className="text-xs text-gray-400 mt-1">{window.location.origin}/tienda/{form.slugPublico || '...'}</p>
+          )}
         </div>
-
-        <hr className="border-gray-100" />
-        <h2 className="font-semibold text-gray-800">Apartados en linea</h2>
-        <label className="flex items-center gap-2 text-sm text-gray-700">
-          <input type="checkbox" checked={form.apartadosActivo} onChange={(e) => setForm({ ...form, apartadosActivo: e.target.checked })} />
-          Habilitar apartados desde la tienda publica
-        </label>
-        {form.apartadosActivo && (
-          <p className="text-xs text-gray-400 -mt-2">{window.location.origin}/apartar/{form.slugPublico || '...'}</p>
-        )}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Horas para recoger (por defecto)</label>

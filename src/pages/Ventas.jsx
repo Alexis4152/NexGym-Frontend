@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react';
 import * as ventasApi from '../api/ventas';
+import * as cortesCajaApi from '../api/cortesCaja';
+import * as sucursalesApi from '../api/sucursales';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
 import { printVentaTicket } from '../utils/printer';
+
+// El Dueno/SUPER_ADMIN ve la pantalla "en vivo": se refresca sola cada 20s sin que tenga
+// que recargar, igual que un panel de monitoreo -- el resto de roles ya ve una lista fija
+// acotada a su sucursal, sin necesidad de este refresco constante.
+const INTERVALO_EN_VIVO_MS = 20_000;
 
 const METODOS_PAGO = [
   { value: 'EFECTIVO', label: 'Efectivo' },
@@ -17,7 +24,7 @@ const ESTADO_COLOR = {
   CANCELADA: 'bg-red-100 text-red-700',
 };
 
-const emptyFiltros = { desde: '', hasta: '', cliente: '', metodoPago: '', estado: '' };
+const emptyFiltros = { desde: '', hasta: '', cliente: '', metodoPago: '', estado: '', usuarioId: '', sucursalId: '' };
 
 export default function Ventas() {
   const [filtros, setFiltros] = useState(emptyFiltros);
@@ -26,12 +33,32 @@ export default function Ventas() {
   const [size, setSize] = useState(20);
   const hayFiltros = Object.values(filtros).some(Boolean);
   const [modalDetalle, setModalDetalle] = useState(null);
-  const { hasPermiso } = useAuth();
+  const [vendedores, setVendedores] = useState([]);
+  const [sucursales, setSucursales] = useState([]);
+  const { hasPermiso, isSupervisor, isSuperAdmin } = useAuth();
   const { notify, confirmDialog } = useNotify();
+  // Solo el Dueno/SUPER_ADMIN ve todas las sucursales a la vez y filtra libre por
+  // sucursal/vendedor (seccion 36 del encargo) -- el resto ya ve una lista fija.
+  const veTodasLasSucursales = isSupervisor || isSuperAdmin;
+
+  useEffect(() => {
+    if (!veTodasLasSucursales) return;
+    cortesCajaApi.listCajeros().then(({ data }) => setVendedores(data.data));
+    sucursalesApi.listSucursalesActivas().then(({ data }) => setSucursales(data.data));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtros, page, size]);
+
+  // "En vivo": refresca la pagina actual sola, sin pisar lo que el usuario este viendo
+  // (el modal de detalle es estado aparte, no se cierra con el refresco).
+  useEffect(() => {
+    const interval = setInterval(load, INTERVALO_EN_VIVO_MS);
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtros, page, size]);
 
@@ -76,7 +103,14 @@ export default function Ventas() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-4">Ventas</h1>
+      <div className="flex items-center gap-2 mb-4">
+        <h1 className="text-xl font-bold text-gray-800">Ventas</h1>
+        {veTodasLasSucursales && (
+          <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> En vivo
+          </span>
+        )}
+      </div>
 
       <div className="flex flex-wrap gap-3 items-end mb-4">
         <div>
@@ -106,6 +140,24 @@ export default function Ventas() {
             <option value="CANCELADA">Cancelada</option>
           </select>
         </div>
+        {veTodasLasSucursales && (
+          <>
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Sucursal</label>
+              <select className="input" value={filtros.sucursalId} onChange={(e) => actualizarFiltro('sucursalId', e.target.value)}>
+                <option value="">Todas</option>
+                {sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Vendedor</label>
+              <select className="input" value={filtros.usuarioId} onChange={(e) => actualizarFiltro('usuarioId', e.target.value)}>
+                <option value="">Todos</option>
+                {vendedores.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+              </select>
+            </div>
+          </>
+        )}
         {hayFiltros && (
           <button type="button" className="btn-secondary text-sm" onClick={() => { setPage(0); setFiltros(emptyFiltros); }}>
             Limpiar filtros
@@ -119,6 +171,7 @@ export default function Ventas() {
             <tr className="text-left text-gray-500 border-b border-gray-100">
               <th className="py-2">#</th>
               <th>Fecha</th>
+              {veTodasLasSucursales && <th>Sucursal</th>}
               <th>Cliente</th>
               <th>Vendedor</th>
               <th>Metodo</th>
@@ -132,6 +185,7 @@ export default function Ventas() {
               <tr key={v.id} className="border-b border-gray-50">
                 <td className="py-2 font-medium text-gray-800">#{v.id}</td>
                 <td className="text-gray-500">{new Date(v.createdAt).toLocaleString()}</td>
+                {veTodasLasSucursales && <td className="text-gray-600">{v.sucursalNombre || '-'}</td>}
                 <td className="text-gray-600">{v.clienteNombre || 'Publico general'}</td>
                 <td className="text-gray-600">{v.usuarioNombre}</td>
                 <td className="text-gray-600">{v.metodoPago}</td>
@@ -147,7 +201,7 @@ export default function Ventas() {
               </tr>
             ))}
             {pageData.content.length === 0 && (
-              <tr><td colSpan={8} className="py-6 text-center text-gray-400">Sin ventas</td></tr>
+              <tr><td colSpan={veTodasLasSucursales ? 9 : 8} className="py-6 text-center text-gray-400">Sin ventas</td></tr>
             )}
           </tbody>
         </table>
@@ -163,6 +217,9 @@ export default function Ventas() {
             <div className="flex justify-between"><span>Cliente</span><span>{modalDetalle.clienteNombre || 'Publico general'}</span></div>
             {modalDetalle.clienteEmail && <div className="flex justify-between"><span>Correo</span><span>{modalDetalle.clienteEmail}</span></div>}
             <div className="flex justify-between"><span>Vendedor</span><span>{modalDetalle.usuarioNombre}</span></div>
+            {modalDetalle.sucursalNombre && (
+              <div className="flex justify-between"><span>Sucursal</span><span>{modalDetalle.sucursalNombre}</span></div>
+            )}
             <div className="flex justify-between"><span>Metodo de pago</span><span>{modalDetalle.metodoPago}</span></div>
             <div className="flex justify-between"><span>Estado</span><span className={'px-2 py-0.5 rounded-full text-xs ' + (ESTADO_COLOR[modalDetalle.estado] || 'bg-gray-100 text-gray-600')}>{modalDetalle.estado}</span></div>
             <div className="flex justify-between"><span>Fecha</span><span>{new Date(modalDetalle.createdAt).toLocaleString()}</span></div>

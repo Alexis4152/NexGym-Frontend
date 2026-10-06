@@ -4,7 +4,6 @@ import axios from 'axios';
 const publicApi = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api' });
 
 export const getPublicCentro = (slug) => publicApi.get(`/public/centros/${slug}`);
-export const getPublicProductos = (slug) => publicApi.get(`/public/centros/${slug}/productos`);
 export const getPublicApartables = (slug) => publicApi.get(`/public/centros/${slug}/apartables`);
 export const getPublicPlanes = (slug) => publicApi.get(`/public/centros/${slug}/planes`);
 export const crearPublicApartado = (slug, data) => publicApi.post(`/public/centros/${slug}/apartados`, data);

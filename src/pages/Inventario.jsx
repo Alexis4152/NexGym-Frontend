@@ -282,25 +282,38 @@ export default function Inventario() {
             </tr>
           </thead>
           <tbody>
-            {pageData.content.map((a) => (
-              <tr key={a.id} className={'border-b border-gray-50 ' + (a.stock <= a.stockMinimo ? 'bg-red-50/50' : '')}>
+            {pageData.content.map((a) => {
+              const agregada = a.sucursalId == null;
+              return (
+              <tr key={a.id ?? `agregado-${a.nombre}`} className={'border-b border-gray-50 ' + (a.stock <= a.stockMinimo ? 'bg-red-50/50' : '')}>
                 <td className="py-2 font-medium text-gray-800">{a.nombre}</td>
-                {veTodasLasSucursales && <td className="text-gray-600">{a.sucursalNombre}</td>}
+                {veTodasLasSucursales && (
+                  <td className="text-gray-600">
+                    {agregada ? <span className="text-brand-700 font-medium">Todas ({a.sucursalesCount})</span> : a.sucursalNombre}
+                  </td>
+                )}
                 <td className="text-gray-600">{a.tipo}</td>
                 <td className="text-gray-600">{a.disciplinaNombres?.join(', ') || '-'}</td>
                 <td className={a.stock <= a.stockMinimo ? 'text-red-600 font-medium' : 'text-gray-700'}>{a.stock}</td>
                 <td>{a.vendible ? <span className="text-emerald-600">Si · ${a.precioVenta ?? 0}</span> : <span className="text-gray-400">No</span>}</td>
                 <td>{a.reservable ? <span className="text-emerald-600">Si</span> : <span className="text-gray-400">No</span>}</td>
                 <td className="text-right space-x-2 whitespace-nowrap">
-                  {!veTodasLasSucursales && a.stock === 0 && (
-                    <button className="text-amber-600 hover:underline" onClick={() => handleBuscarOtrasSucursales(a)}>Buscar en otras sucursales</button>
+                  {agregada ? (
+                    <span className="text-xs text-gray-400">Elige una sucursal para editar</span>
+                  ) : (
+                    <>
+                      {!veTodasLasSucursales && a.stock === 0 && (
+                        <button className="text-amber-600 hover:underline" onClick={() => handleBuscarOtrasSucursales(a)}>Buscar en otras sucursales</button>
+                      )}
+                      {puedeAjustar && <button className="text-brand-600 hover:underline" onClick={() => setModalAjuste(a)}>Ajustar</button>}
+                      {puedeEditar && <button className="text-brand-600 hover:underline" onClick={() => openEdit(a)}>Editar</button>}
+                      {puedeEditar && <button className="text-red-600 hover:underline" onClick={() => handleDeactivate(a)}>Desactivar</button>}
+                    </>
                   )}
-                  {puedeAjustar && <button className="text-brand-600 hover:underline" onClick={() => setModalAjuste(a)}>Ajustar</button>}
-                  {puedeEditar && <button className="text-brand-600 hover:underline" onClick={() => openEdit(a)}>Editar</button>}
-                  {puedeEditar && <button className="text-red-600 hover:underline" onClick={() => handleDeactivate(a)}>Desactivar</button>}
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {pageData.content.length === 0 && (
               <tr><td colSpan={veTodasLasSucursales ? 8 : 7} className="py-6 text-center text-gray-400">Sin resultados</td></tr>
             )}

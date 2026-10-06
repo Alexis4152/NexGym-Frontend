@@ -2,12 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import * as publicApi from '../api/public';
 import { applyBrandColor } from '../utils/theme';
-import { describirPlan, planLleno, textoCupo } from '../utils/planes';
+import { describirPlan, planLleno } from '../utils/planes';
+import Modal from '../components/Modal.jsx';
 
 // Busqueda por texto en Google Maps (no se guardan coordenadas, solo la direccion de la
 // sucursal) -- funciona igual de bien con una direccion parcial que con una completa.
 function googleMapsUrl(direccion) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}`;
+}
+
+// A diferencia del panel de administracion (ver utils/planes.js#textoCupo, que SI muestra
+// el numero exacto de inscritos/cupo a Recepcion/Encargado/Dueno), la tienda publica nunca
+// expone cuantos lugares hay ni cuantos quedan -- solo si todavia se puede apartar o no
+// (seccion 40 del encargo).
+function textoDisponibilidadPublica(p) {
+  return planLleno(p) ? 'Cupo lleno' : 'Disponible';
 }
 
 export default function PublicApartar() {
@@ -30,9 +39,12 @@ export default function PublicApartar() {
   // indice de la foto que se muestra por producto (hasta 3, ver p.imagenes), para poder
   // hojearlas sin salir de la cuadricula de tarjetas.
   const [imagenActiva, setImagenActiva] = useState({});
-  // sucursal elegida por producto (p.id -> sucursalId), para apartarlo en esa sucursal
-  // especifica -- cada sucursal tiene su propio inventario (ver p.sucursales).
-  const [sucursalSel, setSucursalSel] = useState({});
+  // Paso obligatorio de "en que sucursal lo recoges" (seccion 38 del encargo): se abre
+  // al dar "+ Apartar", no se muestra en la tarjeta -- { producto, elegidaId } o null.
+  const [modalSucursal, setModalSucursal] = useState(null);
+  // Vista ampliada de un producto (seccion 39 del encargo): la foto mas grande + "+ Apartar"
+  // al lado -- se abre al seleccionar el producto, independiente del boton de la tarjeta.
+  const [modalDetalle, setModalDetalle] = useState(null);
 
   useEffect(() => {
     Promise.all([publicApi.getPublicCentro(slug), publicApi.getPublicApartables(slug), publicApi.getPublicPlanes(slug)])
@@ -63,16 +75,15 @@ export default function PublicApartar() {
     });
   }, [productos, busqueda, categoriaSel]);
 
-  // La sucursal activa de la tarjeta: la que el cliente eligio, o por defecto la primera
-  // con existencia (p.sucursales ya viene ordenado con esas primero, ver backend).
-  function sucursalElegida(producto) {
-    const elegidaId = sucursalSel[producto.id];
-    const sucs = producto.sucursales || [];
-    return sucs.find((s) => s.sucursalId === elegidaId) || sucs.find((s) => s.stock > 0) || sucs[0];
+  // "+ Apartar" ya NO agrega directo: abre el paso obligatorio de elegir sucursal (seccion
+  // 38 del encargo) -- solo las que tienen existencia, nunca muestra cuanto hay.
+  function abrirSeleccionSucursal(producto) {
+    setModalSucursal({ producto, elegidaId: null });
   }
 
-  function agregar(producto) {
-    const suc = sucursalElegida(producto);
+  function confirmarSucursal() {
+    const { producto, elegidaId } = modalSucursal;
+    const suc = producto.sucursales.find((s) => s.sucursalId === elegidaId);
     if (!suc || suc.stock === 0) return;
     setCart((prev) => {
       const existente = prev.find((i) => i.articuloId === suc.articuloId);
@@ -85,6 +96,7 @@ export default function PublicApartar() {
         sucursalDireccion: suc.sucursalDireccion, precio: producto.precioConDescuento, stock: suc.stock, cantidad: 1,
       }];
     });
+    setModalSucursal(null);
   }
 
   function quitar(articuloId) {
@@ -200,9 +212,9 @@ export default function PublicApartar() {
                     <p className="font-semibold text-gray-800">{p.nombre}</p>
                     <p className="text-brand-700 font-bold text-lg mt-1">${Number(p.precio).toFixed(2)}</p>
                     <p className="text-xs text-gray-500 mt-2">{describirPlan(p)}</p>
-                    {textoCupo(p) && (
-                      <p className={'text-xs mt-2 font-medium ' + (planLleno(p) ? 'text-red-600' : 'text-gray-500')}>
-                        {textoCupo(p)}
+                    {p.limiteAlumnos != null && (
+                      <p className={'text-xs mt-2 font-medium ' + (planLleno(p) ? 'text-red-600' : 'text-emerald-600')}>
+                        {textoDisponibilidadPublica(p)}
                       </p>
                     )}
                   </div>
@@ -248,12 +260,14 @@ export default function PublicApartar() {
               {productosFiltrados.map((p) => {
                 const fotos = p.imagenes?.length ? p.imagenes : (p.imagenUrl ? [p.imagenUrl] : []);
                 const indice = Math.min(imagenActiva[p.id] || 0, fotos.length - 1);
-                const suc = sucursalElegida(p);
                 return (
                 <div key={p.id} className="card">
-                  <div className="aspect-square bg-gray-100 rounded-lg mb-1 overflow-hidden flex items-center justify-center">
+                  <div
+                    className="aspect-square bg-gray-100 rounded-lg mb-1 overflow-hidden flex items-center justify-center cursor-pointer"
+                    onClick={() => setModalDetalle(p)}
+                  >
                     {fotos.length > 0 ? (
-                      <img src={fotos[indice]} alt={p.nombre} className="w-full h-full object-cover" />
+                      <img src={fotos[indice]} alt={p.nombre} className="w-full h-full object-contain" />
                     ) : (
                       <span className="text-3xl">🛍️</span>
                     )}
@@ -271,49 +285,17 @@ export default function PublicApartar() {
                       ))}
                     </div>
                   )}
-                  <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
+                  <p className="text-sm font-medium text-gray-800 truncate cursor-pointer hover:underline" onClick={() => setModalDetalle(p)}>{p.nombre}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <p className="text-brand-700 font-semibold">${Number(p.precioConDescuento).toFixed(2)}</p>
                     {p.descuentoPorcentaje > 0 && (
                       <p className="text-xs text-gray-400 line-through">${Number(p.precioVenta).toFixed(2)}</p>
                     )}
                   </div>
-                  {p.sucursales?.length > 1 && (
-                    <div className="flex flex-wrap gap-1 my-2">
-                      {p.sucursales.map((s) => (
-                        <button
-                          type="button"
-                          key={s.sucursalId}
-                          disabled={s.stock === 0}
-                          onClick={() => setSucursalSel((prev) => ({ ...prev, [p.id]: s.sucursalId }))}
-                          title={s.stock === 0 ? 'Sin stock disponible' : undefined}
-                          className={'px-2 py-0.5 rounded-full text-[10px] font-medium border ' +
-                            (s.stock === 0
-                              ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                              : suc?.sucursalId === s.sucursalId
-                                ? 'bg-brand-600 text-white border-brand-600'
-                                : 'bg-white text-brand-700 border-brand-200')}
-                        >
-                          {s.sucursalNombre}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-400 mb-1">
-                    {suc?.sucursalNombre ? `${suc.sucursalNombre} — ` : ''}
-                    {suc?.stock > 0 ? `Disponibles: ${suc.stock}` : 'Sin stock disponible'}
+                  <p className="text-xs text-gray-400 mb-2">
+                    {p.stockTotal > 0 ? `Disponibles: ${p.stockTotal}` : 'Sin stock disponible'}
                   </p>
-                  {suc?.sucursalDireccion && (
-                    <a
-                      href={googleMapsUrl(suc.sucursalDireccion)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] text-brand-600 hover:underline block mb-2"
-                    >
-                      📍 Ver en Google Maps
-                    </a>
-                  )}
-                  <button type="button" className="btn-secondary text-xs w-full" disabled={!suc || suc.stock === 0} onClick={() => agregar(p)}>
+                  <button type="button" className="btn-secondary text-xs w-full" disabled={p.stockTotal === 0} onClick={() => abrirSeleccionSucursal(p)}>
                     + Apartar
                   </button>
                 </div>
@@ -386,6 +368,101 @@ export default function PublicApartar() {
         </div>
         )}
       </main>
+
+      {modalDetalle && (() => {
+        const fotos = modalDetalle.imagenes?.length ? modalDetalle.imagenes : (modalDetalle.imagenUrl ? [modalDetalle.imagenUrl] : []);
+        const indice = Math.min(imagenActiva[modalDetalle.id] || 0, fotos.length - 1);
+        return (
+          <Modal title={modalDetalle.nombre} onClose={() => setModalDetalle(null)} wide>
+            <div className="grid sm:grid-cols-2 gap-5">
+              <div>
+                <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
+                  {fotos.length > 0 ? (
+                    <img src={fotos[indice]} alt={modalDetalle.nombre} className="w-full h-full object-contain" />
+                  ) : (
+                    <span className="text-5xl">🛍️</span>
+                  )}
+                </div>
+                {fotos.length > 1 && (
+                  <div className="flex gap-1 justify-center mt-2">
+                    {fotos.map((foto, i) => (
+                      <button
+                        type="button"
+                        key={i}
+                        onClick={() => setImagenActiva((prev) => ({ ...prev, [modalDetalle.id]: i }))}
+                        className={'w-2.5 h-2.5 rounded-full ' + (i === indice ? 'bg-brand-600' : 'bg-gray-300')}
+                        aria-label={`Foto ${i + 1}`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col">
+                {modalDetalle.categoriaNombre && (
+                  <p className="text-xs text-gray-400 mb-1">{modalDetalle.categoriaNombre}</p>
+                )}
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-brand-700 font-bold text-2xl">${Number(modalDetalle.precioConDescuento).toFixed(2)}</p>
+                  {modalDetalle.descuentoPorcentaje > 0 && (
+                    <p className="text-sm text-gray-400 line-through">${Number(modalDetalle.precioVenta).toFixed(2)}</p>
+                  )}
+                </div>
+                <p className="text-sm text-gray-500 mb-4">
+                  {modalDetalle.stockTotal > 0 ? `Disponibles: ${modalDetalle.stockTotal}` : 'Sin stock disponible'}
+                </p>
+                <button
+                  type="button"
+                  className="btn-primary w-full mt-auto"
+                  disabled={modalDetalle.stockTotal === 0}
+                  onClick={() => { const p = modalDetalle; setModalDetalle(null); abrirSeleccionSucursal(p); }}
+                >
+                  + Apartar
+                </button>
+              </div>
+            </div>
+          </Modal>
+        );
+      })()}
+
+      {modalSucursal && (
+        <Modal title={`¿En que sucursal quieres recoger "${modalSucursal.producto.nombre}"?`} onClose={() => setModalSucursal(null)}>
+          <p className="text-xs text-gray-500 mb-3">Elige una sucursal para continuar — solo se muestran las que tienen existencia.</p>
+          <div className="space-y-2 mb-4">
+            {modalSucursal.producto.sucursales.filter((s) => s.stock > 0).map((s) => (
+              <div
+                key={s.sucursalId}
+                role="radio"
+                aria-checked={modalSucursal.elegidaId === s.sucursalId}
+                onClick={() => setModalSucursal((prev) => ({ ...prev, elegidaId: s.sucursalId }))}
+                className={'flex items-start gap-2 p-2 rounded-lg border cursor-pointer ' +
+                  (modalSucursal.elegidaId === s.sucursalId ? 'border-brand-500 bg-brand-50/50' : 'border-gray-200 hover:bg-gray-50')}
+              >
+                <input type="radio" readOnly checked={modalSucursal.elegidaId === s.sucursalId} className="mt-1 pointer-events-none" />
+                <div className="text-sm">
+                  <p className="font-medium text-gray-800">{s.sucursalNombre}</p>
+                  {s.sucursalDireccion && (
+                    <p className="text-xs text-gray-500">
+                      {s.sucursalDireccion}{' '}
+                      <a
+                        href={googleMapsUrl(s.sucursalDireccion)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-brand-600 hover:underline"
+                      >
+                        📍 ver mapa
+                      </a>
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <button type="button" className="btn-primary w-full" disabled={!modalSucursal.elegidaId} onClick={confirmarSucursal}>
+            Confirmar y apartar
+          </button>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -20,18 +20,20 @@ export default function CatalogoPublico() {
     if (centroId) centrosApi.getCentro(centroId).then(({ data }) => setCentro(data.data));
   }, [centroId]);
 
-  const publicUrl = centro?.slugPublico ? `${window.location.origin}/tienda/${centro.slugPublico}` : null;
+  // El catalogo publico independiente ya no existe (seccion 38 del encargo): la tienda de
+  // apartados en /tienda/:slug lo reemplazo por completo, asi que este link YA NO usa
+  // /apartar/ (ruta vieja, eliminada) sino /tienda/.
+  const apartadosUrl = centro?.slugPublico ? `${window.location.origin}/tienda/${centro.slugPublico}` : null;
 
   function copyLink() {
-    navigator.clipboard.writeText(publicUrl);
+    navigator.clipboard.writeText(apartadosUrl);
     notify('Link copiado al portapapeles', 'success');
   }
 
   async function abrirArchivoApartados(tipo) {
-    const apartarUrl = `${window.location.origin}/apartar/${centro.slugPublico}`;
     const ruta = tipo === 'qr' ? 'apartados-qr.png' : 'apartados-promo.pdf';
     try {
-      const { data } = await api.get(`/centros/${centroId}/${ruta}`, { params: { url: apartarUrl }, responseType: 'blob' });
+      const { data } = await api.get(`/centros/${centroId}/${ruta}`, { params: { url: apartadosUrl }, responseType: 'blob' });
       window.open(URL.createObjectURL(data), '_blank');
     } catch {
       notify('No se pudo generar el archivo', 'error');
@@ -42,45 +44,12 @@ export default function CatalogoPublico() {
     <div>
       <h1 className="text-xl font-bold text-gray-800 mb-4">Catálogo público</h1>
 
-      <div className="card mb-6">
-        <h2 className="font-semibold text-gray-800 mb-2">Catalogo publico</h2>
-        {!centro?.catalogoPublicoActivo ? (
-          <p className="text-sm text-gray-500">
-            El catalogo publico esta desactivado. Actívalo desde{' '}
-            <span className="text-brand-600">Configuracion del centro</span> para compartir tu tienda por link o QR.
-          </p>
-        ) : (
-          <div>
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              <input className="input flex-1 min-w-[220px]" readOnly value={publicUrl} />
-              <button className="btn-secondary" onClick={copyLink}>Copiar link</button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <a className="btn-secondary text-sm" target="_blank" rel="noreferrer"
-                 href={`https://wa.me/?text=${encodeURIComponent('Mira nuestro catalogo: ' + publicUrl)}`}>
-                WhatsApp
-              </a>
-              <a className="btn-secondary text-sm" target="_blank" rel="noreferrer"
-                 href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(publicUrl)}`}>
-                Facebook
-              </a>
-              <a className="btn-secondary text-sm" target="_blank" rel="noreferrer"
-                 href={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(publicUrl)}`}>
-                Ver / descargar QR
-              </a>
-            </div>
-          </div>
-        )}
-      </div>
-
       {centro?.apartadosActivo && centro?.slugPublico && (
         <div className="card mb-6">
           <h2 className="font-semibold text-gray-800 mb-2">Apartados en linea</h2>
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            <input className="input flex-1 min-w-[220px]" readOnly value={`${window.location.origin}/apartar/${centro.slugPublico}`} />
-            <button className="btn-secondary" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/apartar/${centro.slugPublico}`); notify('Link copiado al portapapeles', 'success'); }}>
-              Copiar link
-            </button>
+            <input className="input flex-1 min-w-[220px]" readOnly value={apartadosUrl} />
+            <button className="btn-secondary" onClick={copyLink}>Copiar link</button>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn-secondary text-sm" onClick={() => abrirArchivoApartados('qr')}>

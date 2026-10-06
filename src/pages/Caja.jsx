@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import * as cajaApi from '../api/caja';
+import * as cortesCajaApi from '../api/cortesCaja';
+import * as sucursalesApi from '../api/sucursales';
 import { useNotify } from '../context/NotifyContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
@@ -12,10 +14,14 @@ const ESTADO_BADGE = {
 };
 
 const emptyForm = { categoriaId: '', monto: '', metodoPago: 'EFECTIVO', descripcion: '' };
+const emptyFiltros = { desde: '', hasta: '', usuarioId: '', sucursalId: '' };
 
 export default function Caja() {
   const [pageData, setPageData] = useState({ content: [], totalPages: 0 });
   const [page, setPage] = useState(0);
+  const [filtros, setFiltros] = useState(emptyFiltros);
+  const [vendedores, setVendedores] = useState([]);
+  const [sucursales, setSucursales] = useState([]);
   const [categoriasEgreso, setCategoriasEgreso] = useState([]);
   const [modalEgreso, setModalEgreso] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -23,22 +29,40 @@ export default function Caja() {
   const [pendientes, setPendientes] = useState({ content: [], totalPages: 0 });
   const [modalRechazar, setModalRechazar] = useState(null); // { id, motivo }
   const { notify, confirmDialog } = useNotify();
-  const { isEncargadoOSuperior } = useAuth();
+  const { isEncargadoOSuperior, isSupervisor, isSuperAdmin } = useAuth();
+  const hayFiltros = Object.values(filtros).some(Boolean);
+  // Solo el Dueno/SUPER_ADMIN busca libremente por sucursal/vendedor (seccion 37 del
+  // encargo, mismo patron que Ventas/Cortes de caja): el resto ya ve una lista fija.
+  const puedeFiltrar = isSupervisor || isSuperAdmin;
 
   useEffect(() => {
     cajaApi.listCategoriasMovimiento('EGRESO').then(({ data }) => setCategoriasEgreso(data.data));
   }, []);
 
   useEffect(() => {
+    if (!puedeFiltrar) return;
+    cortesCajaApi.listCajeros().then(({ data }) => setVendedores(data.data));
+    sucursalesApi.listSucursalesActivas().then(({ data }) => setSucursales(data.data));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     load();
-  }, [page]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, filtros]);
 
   useEffect(() => {
     if (isEncargadoOSuperior) cargarPendientes();
   }, [isEncargadoOSuperior]);
 
+  function actualizarFiltro(campo, valor) {
+    setPage(0);
+    setFiltros((f) => ({ ...f, [campo]: valor }));
+  }
+
   function load() {
-    cajaApi.listMovimientos(undefined, undefined, page, 20).then(({ data }) => setPageData(data.data));
+    cajaApi.listMovimientos(filtros.desde || undefined, filtros.hasta || undefined, page, 20, filtros.usuarioId, filtros.sucursalId)
+      .then(({ data }) => setPageData(data.data));
   }
 
   function cargarPendientes() {
@@ -105,6 +129,38 @@ export default function Caja() {
         <button className="btn-primary" onClick={openModalEgreso}>+ Egreso</button>
       </div>
 
+      {puedeFiltrar && (
+        <div className="card mb-4 flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">Desde</label>
+            <input type="date" className="input" value={filtros.desde} onChange={(e) => actualizarFiltro('desde', e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">Hasta</label>
+            <input type="date" className="input" value={filtros.hasta} onChange={(e) => actualizarFiltro('hasta', e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">Sucursal</label>
+            <select className="input" value={filtros.sucursalId} onChange={(e) => actualizarFiltro('sucursalId', e.target.value)}>
+              <option value="">Todas</option>
+              {sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">Vendedor</label>
+            <select className="input" value={filtros.usuarioId} onChange={(e) => actualizarFiltro('usuarioId', e.target.value)}>
+              <option value="">Todos</option>
+              {vendedores.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+            </select>
+          </div>
+          {hayFiltros && (
+            <button type="button" className="btn-secondary text-sm" onClick={() => { setPage(0); setFiltros(emptyFiltros); }}>
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+      )}
+
       {isEncargadoOSuperior && pendientes.content.length > 0 && (
         <div className="card mb-4 border-amber-200 bg-amber-50/50">
           <h3 className="font-semibold text-amber-800 mb-2">⏳ Egresos pendientes de aprobacion</h3>
@@ -133,6 +189,8 @@ export default function Caja() {
           <thead>
             <tr className="text-left text-gray-500 border-b border-gray-100">
               <th className="py-2">Fecha</th>
+              {puedeFiltrar && <th>Sucursal</th>}
+              {puedeFiltrar && <th>Vendedor</th>}
               <th>Categoria</th>
               <th>Tipo</th>
               <th>Metodo</th>
@@ -145,6 +203,8 @@ export default function Caja() {
             {pageData.content.map((m) => (
               <tr key={m.id} className="border-b border-gray-50">
                 <td className="py-2 text-gray-600">{m.fecha}</td>
+                {puedeFiltrar && <td className="text-gray-600">{m.sucursalNombre || '-'}</td>}
+                {puedeFiltrar && <td className="text-gray-600">{m.registradoPorNombre || '-'}</td>}
                 <td className="text-gray-800">{m.categoriaNombre}</td>
                 <td>
                   <span className={m.tipo === 'INGRESO' ? 'text-emerald-600' : 'text-red-600'}>{m.tipo}</span>
@@ -170,7 +230,7 @@ export default function Caja() {
               </tr>
             ))}
             {pageData.content.length === 0 && (
-              <tr><td colSpan={7} className="py-6 text-center text-gray-400">Sin movimientos registrados</td></tr>
+              <tr><td colSpan={puedeFiltrar ? 9 : 7} className="py-6 text-center text-gray-400">Sin movimientos registrados</td></tr>
             )}
           </tbody>
         </table>

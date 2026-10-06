@@ -2,8 +2,8 @@ import api from './axios';
 
 export const listCategoriasMovimiento = (tipo) => api.get('/caja/categorias', { params: { tipo } });
 export const createCategoriaMovimiento = (data) => api.post('/caja/categorias', data);
-export const listMovimientos = (desde, hasta, page = 0, size = 20) =>
-  api.get('/caja/movimientos', { params: { desde, hasta, page, size } });
+export const listMovimientos = (desde, hasta, page = 0, size = 20, usuarioId, sucursalId) =>
+  api.get('/caja/movimientos', { params: { desde, hasta, usuarioId: usuarioId || undefined, sucursalId: sucursalId || undefined, page, size } });
 export const registrarIngreso = (data) => api.post('/caja/ingresos', data);
 
 // multipart: el comprobante (PDF/imagen) es opcional -- sin el, el egreso nace
