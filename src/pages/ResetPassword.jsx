@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as authApi from '../api/auth';
 import { useNotify } from '../context/NotifyContext.jsx';
+import PasswordInput from '../components/PasswordInput.jsx';
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -43,16 +44,14 @@ export default function ResetPassword() {
         <label className="block text-sm font-medium text-gray-700 mb-1">Codigo recibido por correo</label>
         <input className="input mb-4" value={token} onChange={(e) => setToken(e.target.value)} />
         <label className="block text-sm font-medium text-gray-700 mb-1">Nueva contrasena</label>
-        <input
-          type="password"
-          className="input mb-4"
+        <PasswordInput
+          className="mb-4"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
         />
         <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar contrasena</label>
-        <input
-          type="password"
-          className="input mb-4"
+        <PasswordInput
+          className="mb-4"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
         />

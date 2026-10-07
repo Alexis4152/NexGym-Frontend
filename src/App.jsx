@@ -102,7 +102,7 @@ export default function App() {
         <Route path="/tienda" element={<PrivateRoute section="TIENDA"><Tienda /></PrivateRoute>} />
         <Route path="/punto-venta" element={<PrivateRoute section="TIENDA"><VentaPos /></PrivateRoute>} />
         <Route path="/ventas" element={<PrivateRoute section="TIENDA"><Ventas /></PrivateRoute>} />
-        <Route path="/apartados" element={<PrivateRoute section="TIENDA"><Apartados /></PrivateRoute>} />
+        <Route path="/apartados" element={<PrivateRoute section={['TIENDA', 'MEMBRESIAS']}><Apartados /></PrivateRoute>} />
         <Route path="/catalogo-publico" element={<PrivateRoute section="TIENDA"><CatalogoPublico /></PrivateRoute>} />
 
         {/* Inventario y compras */}

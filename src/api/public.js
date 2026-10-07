@@ -7,3 +7,4 @@ export const getPublicCentro = (slug) => publicApi.get(`/public/centros/${slug}`
 export const getPublicApartables = (slug) => publicApi.get(`/public/centros/${slug}/apartables`);
 export const getPublicPlanes = (slug) => publicApi.get(`/public/centros/${slug}/planes`);
 export const crearPublicApartado = (slug, data) => publicApi.post(`/public/centros/${slug}/apartados`, data);
+export const crearPublicApartadoPlan = (slug, data) => publicApi.post(`/public/centros/${slug}/apartados-plan`, data);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import PasswordInput from '../components/PasswordInput.jsx';
 
 export default function Login() {
   const { login } = useAuth();
@@ -44,9 +45,8 @@ export default function Login() {
         <input className="input mb-4" value={email} onChange={(e) => setEmail(e.target.value)} />
 
         <label className="block text-sm font-medium text-gray-700 mb-1">Contrasena</label>
-        <input
-          type="password"
-          className="input mb-2"
+        <PasswordInput
+          className="mb-2"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />

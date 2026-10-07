@@ -19,6 +19,17 @@ function textoDisponibilidadPublica(p) {
   return planLleno(p) ? 'Cupo lleno' : 'Disponible';
 }
 
+const PORCENTAJE_ANTICIPO_PLAN = 0.2;
+function validarTelefono(t) {
+  return /^(?=(?:.*\d){7,})[0-9+\-\s()]+$/.test(t);
+}
+function validarEmail(e) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+}
+
+const emptyPlanCliente = { nombre: '', telefono: '', email: '', notas: '' };
+const emptyTarjeta = { numero: '', vencimiento: '', cvv: '', nombre: '' };
+
 export default function PublicApartar() {
   const { slug } = useParams();
   const [centro, setCentro] = useState(null);
@@ -45,6 +56,15 @@ export default function PublicApartar() {
   // Vista ampliada de un producto (seccion 39 del encargo): la foto mas grande + "+ Apartar"
   // al lado -- se abre al seleccionar el producto, independiente del boton de la tarjeta.
   const [modalDetalle, setModalDetalle] = useState(null);
+  // Apartar un plan de membresia (seccion 41 del encargo): anticipo del 20% con tarjeta,
+  // pago SIMULADO (no hay pasarela conectada todavia) -- el modal solo pide los datos de
+  // la tarjeta para mostrar el flujo, nunca se envian al backend.
+  const [modalPlan, setModalPlan] = useState(null); // el plan que se esta apartando, o null
+  const [planCliente, setPlanCliente] = useState(emptyPlanCliente);
+  const [tarjeta, setTarjeta] = useState(emptyTarjeta);
+  const [enviandoPlan, setEnviandoPlan] = useState(false);
+  const [errorPlan, setErrorPlan] = useState('');
+  const [exitoPlan, setExitoPlan] = useState(null);
 
   useEffect(() => {
     Promise.all([publicApi.getPublicCentro(slug), publicApi.getPublicApartables(slug), publicApi.getPublicPlanes(slug)])
@@ -108,7 +128,7 @@ export default function PublicApartar() {
   }
 
   const total = cart.reduce((sum, i) => sum + i.precio * i.cantidad, 0);
-  const telefonoValido = /^(?=(?:.*\d){7,})[0-9+\-\s()]+$/.test(clienteTelefono);
+  const telefonoValido = validarTelefono(clienteTelefono);
 
   async function enviarSolicitud(e) {
     e.preventDefault();
@@ -139,6 +159,52 @@ export default function PublicApartar() {
       setError(err.response?.data?.message || 'No se pudo enviar tu solicitud, intenta de nuevo');
     } finally {
       setEnviando(false);
+    }
+  }
+
+  function abrirApartarPlan(plan) {
+    setModalPlan(plan);
+    setPlanCliente(emptyPlanCliente);
+    setTarjeta(emptyTarjeta);
+    setErrorPlan('');
+  }
+
+  async function confirmarApartadoPlan(e) {
+    e.preventDefault();
+    setErrorPlan('');
+    if (!planCliente.nombre.trim()) {
+      setErrorPlan('Tu nombre es obligatorio');
+      return;
+    }
+    if (!validarTelefono(planCliente.telefono)) {
+      setErrorPlan('Ingresa un telefono valido');
+      return;
+    }
+    if (!validarEmail(planCliente.email)) {
+      setErrorPlan('Ingresa un correo valido');
+      return;
+    }
+    if (!tarjeta.numero.trim() || !tarjeta.vencimiento.trim() || !tarjeta.cvv.trim() || !tarjeta.nombre.trim()) {
+      setErrorPlan('Completa los datos de la tarjeta');
+      return;
+    }
+    setEnviandoPlan(true);
+    try {
+      // Los datos de la tarjeta NUNCA se envian al backend -- este pago es simulado (no hay
+      // pasarela conectada todavia), solo se piden para mostrar el flujo completo.
+      const { data } = await publicApi.crearPublicApartadoPlan(slug, {
+        planId: modalPlan.id,
+        clienteNombre: planCliente.nombre,
+        clienteTelefono: planCliente.telefono,
+        clienteEmail: planCliente.email,
+        notas: planCliente.notas || null,
+      });
+      setExitoPlan(data.data);
+      setModalPlan(null);
+    } catch (err) {
+      setErrorPlan(err.response?.data?.message || 'No se pudo procesar tu apartado, intenta de nuevo');
+    } finally {
+      setEnviandoPlan(false);
     }
   }
 
@@ -201,8 +267,18 @@ export default function PublicApartar() {
           <div>
             <h2 className="text-lg font-semibold text-gray-800 mb-1">Planes de membresia</h2>
             <p className="text-sm text-gray-500 mb-4">
-              Conoce las opciones disponibles — para contratar un plan visitanos en el centro.
+              Conoce las opciones disponibles — apartalas con un anticipo del 20% pagado con tarjeta.
             </p>
+            {exitoPlan && (
+              <div className="card mb-4 border border-emerald-200 bg-emerald-50">
+                <p className="font-semibold text-emerald-800">✅ Apartado registrado — folio #{exitoPlan.id}</p>
+                <p className="text-sm text-emerald-700 mt-1">
+                  Se cobro un anticipo de ${Number(exitoPlan.montoAnticipo).toFixed(2)} con tarjeta (de ${Number(exitoPlan.precioPlan).toFixed(2)} del plan).
+                  El equipo de {centro.nombre} se pondra en contacto contigo para completar tu inscripcion.
+                </p>
+                <button type="button" className="text-xs text-emerald-700 underline mt-2" onClick={() => setExitoPlan(null)}>Cerrar</button>
+              </div>
+            )}
             {planes.length === 0 ? (
               <p className="text-sm text-gray-500">Aun no hay planes publicados.</p>
             ) : (
@@ -217,6 +293,14 @@ export default function PublicApartar() {
                         {textoDisponibilidadPublica(p)}
                       </p>
                     )}
+                    <button
+                      type="button"
+                      className="btn-secondary text-xs w-full mt-3"
+                      disabled={planLleno(p)}
+                      onClick={() => abrirApartarPlan(p)}
+                    >
+                      {planLleno(p) ? 'Cupo lleno' : 'Apartar este plan'}
+                    </button>
                   </div>
                 ))}
               </div>
@@ -461,6 +545,65 @@ export default function PublicApartar() {
           <button type="button" className="btn-primary w-full" disabled={!modalSucursal.elegidaId} onClick={confirmarSucursal}>
             Confirmar y apartar
           </button>
+        </Modal>
+      )}
+
+      {modalPlan && (
+        <Modal title={`Apartar "${modalPlan.nombre}"`} onClose={() => setModalPlan(null)}>
+          <form onSubmit={confirmarApartadoPlan} className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Para apartar este plan se cobra un anticipo del 20%:{' '}
+              <strong>${(Number(modalPlan.precio) * PORCENTAJE_ANTICIPO_PLAN).toFixed(2)}</strong> de ${Number(modalPlan.precio).toFixed(2)}.
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Nombre completo *</label>
+              <input className="input" value={planCliente.nombre} onChange={(e) => setPlanCliente((p) => ({ ...p, nombre: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Telefono *</label>
+              <input className="input" value={planCliente.telefono} onChange={(e) => setPlanCliente((p) => ({ ...p, telefono: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Correo *</label>
+              <input className="input" type="email" value={planCliente.email} onChange={(e) => setPlanCliente((p) => ({ ...p, email: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Notas (opcional)</label>
+              <textarea className="input" rows={2} maxLength={100} value={planCliente.notas} onChange={(e) => setPlanCliente((p) => ({ ...p, notas: e.target.value }))} />
+            </div>
+
+            <hr className="border-gray-100" />
+            <p className="text-xs font-semibold text-gray-700">Pago con tarjeta</p>
+            <p className="text-[11px] text-gray-400 -mt-2">
+              Modo de prueba: todavia no esta conectado a ningun banco, es solo para mostrar el flujo.
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Numero de tarjeta</label>
+              <input className="input" placeholder="4111 1111 1111 1111" maxLength={19}
+                value={tarjeta.numero} onChange={(e) => setTarjeta((t) => ({ ...t, numero: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Vencimiento</label>
+                <input className="input" placeholder="MM/AA" maxLength={5}
+                  value={tarjeta.vencimiento} onChange={(e) => setTarjeta((t) => ({ ...t, vencimiento: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">CVV</label>
+                <input className="input" placeholder="123" maxLength={4}
+                  value={tarjeta.cvv} onChange={(e) => setTarjeta((t) => ({ ...t, cvv: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Nombre en la tarjeta</label>
+              <input className="input" value={tarjeta.nombre} onChange={(e) => setTarjeta((t) => ({ ...t, nombre: e.target.value }))} />
+            </div>
+
+            {errorPlan && <p className="text-xs text-red-600">{errorPlan}</p>}
+            <button className="btn-primary w-full mt-2" disabled={enviandoPlan}>
+              {enviandoPlan ? 'Procesando pago...' : `Pagar $${(Number(modalPlan.precio) * PORCENTAJE_ANTICIPO_PLAN).toFixed(2)} y apartar`}
+            </button>
+          </form>
         </Modal>
       )}
     </div>

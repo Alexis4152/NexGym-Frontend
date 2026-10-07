@@ -26,7 +26,9 @@ export default function PrivateRoute({ children, section, adminOnly, superAdminO
   }
   if (superAdminOnly && !isSuperAdmin) return <Navigate to="/" replace />;
   if (adminOnly && !isAdmin) return <Navigate to="/" replace />;
-  if (section && !hasSection(section) && !isSuperAdmin) return <Navigate to="/" replace />;
+  const tieneSeccion = !section || isSuperAdmin
+    || (Array.isArray(section) ? section.some(hasSection) : hasSection(section));
+  if (!tieneSeccion) return <Navigate to="/" replace />;
 
   return children;
 }
