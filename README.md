@@ -19,6 +19,17 @@ Corre en `http://localhost:5174` y hace proxy de `/api` y `/uploads` hacia el ba
 `http://localhost:8081` (ver `vite.config.js`). Ajusta `.env.production` con la URL real de
 la API antes de desplegar.
 
+## Variables de entorno
+
+No hay secretos aqui: Vite solo usa `VITE_API_URL` (la base de la API). Ya vienen
+commiteados dos archivos con valores no sensibles:
+
+| Archivo | Cuando se usa | Valor |
+|---|---|---|
+| `.env.development` | `npm run dev` | `/api` (proxy local hacia el backend, ver `vite.config.js`) |
+| `.env.production` | `npm run build` | URL real de la API en produccion — **ajusta esto a tu dominio antes de desplegar** |
+| `.env.local` *(no se commitea, ya esta en `.gitignore`)* | sobreescribe cualquiera de los dos en tu maquina | opcional, para pruebas locales sin tocar los archivos de arriba |
+
 ## Estructura
 
 ```
