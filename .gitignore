@@ -1,6 +1,10 @@
 node_modules/
 dist/
-.env.local
 *.log
 .idea/
 .vscode/
+.DS_Store
+
+# Overrides locales (los .env.development/.env.production no tienen secretos y si se versionan)
+.env.local
+.env.*.local
