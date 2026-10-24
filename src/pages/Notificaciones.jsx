@@ -37,6 +37,9 @@ const TIPO_LABEL = {
   ADMIN_DISCIPLINA_NUEVA: 'Disciplina nueva',
   ADMIN_ALUMNO_NUEVO: 'Alumno registrado',
   EGRESO_PENDIENTE_APROBACION: 'Egreso pendiente de aprobación',
+  ADMIN_APARTADO_NUEVO: 'Apartado en línea',
+  ADMIN_APARTADO_PLAN_NUEVO: 'Apartado de membresía',
+  ADMIN_APARTADO_CANCELADO_CLIENTE: 'Apartado cancelado por cliente',
   INSTRUCTOR_CLASE_ASIGNADA: 'Clase asignada',
   INSTRUCTOR_CLASE_CANCELADA: 'Clase cancelada',
   INSTRUCTOR_ALUMNO_INSCRITO: 'Alumno inscrito',
@@ -148,6 +151,9 @@ export default function Notificaciones() {
             <div className="flex flex-col items-end gap-2 shrink-0">
               {n.alumnoId && (
                 <Link to={`/alumnos/${n.alumnoId}`} className="text-xs text-brand-600 hover:underline">Ver alumno</Link>
+              )}
+              {(n.entidadTipo === 'APARTADO' || n.entidadTipo === 'APARTADO_PLAN') && (
+                <Link to={n.entidadTipo === 'APARTADO_PLAN' ? '/apartados?tab=planes' : '/apartados'} className="text-xs text-brand-600 hover:underline">Ver apartado</Link>
               )}
               {!n.leida && (
                 <button className="text-xs text-gray-500 hover:underline" onClick={() => handleLeer(n)}>Marcar leída</button>

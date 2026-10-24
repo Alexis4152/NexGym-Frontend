@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import * as membresiasApi from '../api/membresias';
 import * as cortesCajaApi from '../api/cortesCaja';
+import * as apartadosPlanApi from '../api/apartadosPlan';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
 import RegistrarMembresiaForm from '../components/RegistrarMembresiaForm.jsx';
+import ApartadosPlanPanel from '../components/ApartadosPlanPanel.jsx';
+import { hoyLocal } from '../utils/fechas.js';
 
 const ESTADO_COLOR = {
   PENDIENTE: 'bg-amber-100 text-amber-700',
@@ -29,6 +32,12 @@ export default function Membresias() {
   const [modalMotivo, setModalMotivo] = useState(null); // { id, motivo }
   const [corteAbierto, setCorteAbierto] = useState(null);
   const { notify } = useNotify();
+  // Pestana "Apartados en línea": membresias apartadas desde la tienda que esperan su alta
+  // (mismo panel que Apartados > Planes). ?tab=apartados la abre directo.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get('tab') === 'apartados' ? 'apartados' : 'membresias';
+  const setTab = (t) => setSearchParams(t === 'apartados' ? { tab: 'apartados' } : {}, { replace: true });
+  const [apartadosPendientes, setApartadosPendientes] = useState(0);
 
   useEffect(() => {
     membresiasApi.listMembresias(page, 20).then(({ data }) => setPageData(data.data));
@@ -36,7 +45,19 @@ export default function Membresias() {
 
   useEffect(() => {
     cortesCajaApi.getCorteAbierto().then(({ data }) => setCorteAbierto(data.data));
+    contarApartadosPendientes();
   }, []);
+
+  function contarApartadosPendientes() {
+    apartadosPlanApi.listApartadosPlan({ estado: 'PENDIENTE' }, 0, 1)
+      .then(({ data }) => setApartadosPendientes(data.data.totalElements))
+      .catch(() => setApartadosPendientes(0));
+  }
+
+  function handleApartadoProcesado() {
+    contarApartadosPendientes();
+    reloadMembresias();
+  }
 
   function reloadMembresias() {
     membresiasApi.listMembresias(page, 20).then(({ data }) => setPageData(data.data));
@@ -71,6 +92,28 @@ export default function Membresias() {
         <button className="btn-primary" disabled={!corteAbierto} onClick={() => setModalAsignar(true)}>+ Registrar membresia</button>
       </div>
 
+      <div className="flex gap-6 border-b border-gray-200 mb-4 text-sm">
+        <button type="button" className={'pb-2 ' + (tab === 'membresias' ? 'border-b-2 border-brand-600 text-brand-700 font-medium' : 'text-gray-500')} onClick={() => setTab('membresias')}>
+          🎫 Membresías
+        </button>
+        <button type="button" className={'pb-2 ' + (tab === 'apartados' ? 'border-b-2 border-brand-600 text-brand-700 font-medium' : 'text-gray-500')} onClick={() => setTab('apartados')}>
+          🌐 Apartados en línea
+          {apartadosPendientes > 0 && (
+            <span className="ml-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold">{apartadosPendientes}</span>
+          )}
+        </button>
+      </div>
+
+      {tab === 'apartados' && (
+        <>
+          <p className="text-sm text-gray-500 mb-3">
+            Planes apartados desde la tienda en línea con anticipo. Usa <strong>Dar de alta</strong> para ligarlos a un alumno (existente o nuevo) y crear su membresía; el anticipo queda como primer pago.
+          </p>
+          <ApartadosPlanPanel estadoInicial="PENDIENTE" onCambio={handleApartadoProcesado} />
+        </>
+      )}
+
+      {tab === 'membresias' && <>
       {!corteAbierto && (
         <div className="bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg px-4 py-3 mb-4">
           ⚠️ No hay corte de caja abierto. Debes <Link to="/cortes-caja" className="underline font-semibold">abrir un corte</Link> antes de poder registrar una membresía.
@@ -101,6 +144,12 @@ export default function Membresias() {
                   <td>
                     <div className="flex flex-wrap gap-1 items-center">
                       <span className={'px-2 py-0.5 rounded-full text-xs ' + ESTADO_COLOR[m.estado]}>{m.estado}</span>
+                      {m.estado === 'PENDIENTE' && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-50 text-amber-700"
+                          title="Regla de inicio: si hoy aún había clase disponible, arranca al registrar su asistencia hoy">
+                          {m.fechaInicioAnticipable === hoyLocal() ? `Arranca hoy al asistir (si no, ${m.fechaInicio})` : `Inicia ${m.fechaInicio}`}
+                        </span>
+                      )}
                       {m.indicadores?.map((ind) => (
                         <span key={ind} className="px-2 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-600">{INDICADOR_LABEL[ind] || ind}</span>
                       ))}
@@ -125,6 +174,7 @@ export default function Membresias() {
           </table>
           <Pagination page={page} totalPages={pageData.totalPages} onChange={setPage} />
         </div>
+      </>}
 
       {modalAsignar && (
         <Modal title="Registrar membresia" onClose={() => setModalAsignar(false)}>

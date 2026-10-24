@@ -105,6 +105,7 @@ export const NAV_GROUPS = [
       // opera dentro de la(s) sucursal(es) que tiene asignada(s).
       { code: 'SUCURSALES', label: 'Sucursales', path: '/sucursales', requires: 'admin' },
       { code: 'CENTROS', label: 'Centros', path: '/centros', requires: 'superAdmin' },
+      { code: 'CORREO_SISTEMA', label: 'Correo del sistema', path: '/correo-sistema', requires: 'superAdmin' },
     ],
   },
 ];

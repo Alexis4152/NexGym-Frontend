@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useNotify } from '../context/NotifyContext.jsx';
 import { NAV_GROUPS } from '../config/sections.js';
 import { useEscapeClose } from '../hooks/useEscapeClose.js';
+import { getApartadosPendientes } from '../api/apartados';
 import NotificationBell from './NotificationBell.jsx';
+
+// Cada cuanto se revisan los apartados pendientes de la tienda en linea para el badge del
+// menu y el aviso de "nuevo apartado" (independiente del POLL de la campana).
+const POLL_APARTADOS_MS = 30_000;
 
 // Sidebar homologado con DemoPV: mismo esquema oscuro (--brand-sidebar), mismo
 // patron de grupos colapsables con chevron (como el submenu "Configuracion" de
@@ -46,6 +52,42 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSED_KEY) === '1');
   const [mobileOpen, setMobileOpen] = useState(false);
   useEscapeClose(() => setMobileOpen(false));
+  const { notify } = useNotify();
+
+  // Apartados de la tienda en linea pendientes de atender: badge en "Apartados" y aviso
+  // emergente cuando llega uno nuevo. Mismo publico que la notificacion (seccion TIENDA:
+  // SUPER_ADMIN, Dueno, Administrador, Recepcion y Caja/Ventas).
+  const veApartados = isSuperAdmin || hasSection('TIENDA');
+  const [apartadosPendientes, setApartadosPendientes] = useState(0);
+  const apartadosPrevios = useRef(null);
+  useEffect(() => {
+    if (!veApartados) return undefined;
+    apartadosPrevios.current = null;
+    async function revisar() {
+      try {
+        const { data } = await getApartadosPendientes();
+        const total = (data.data.productos || 0) + (data.data.planes || 0);
+        if (apartadosPrevios.current != null && total > apartadosPrevios.current) {
+          const n = total - apartadosPrevios.current;
+          notify(`🔔 ${n === 1 ? 'Llegó un nuevo apartado' : `Llegaron ${n} apartados nuevos`} desde la tienda en línea`, 'success');
+        }
+        apartadosPrevios.current = total;
+        setApartadosPendientes(total);
+      } catch {
+        // SUPER_ADMIN sin centro elegido, sin red, etc.: sin badge.
+      }
+    }
+    revisar();
+    const interval = setInterval(revisar, POLL_APARTADOS_MS);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [veApartados, user?.centroId, location.pathname === '/apartados']);
+
+  const badges = { APARTADOS: apartadosPendientes };
+  const badgeDe = (codigo) => badges[codigo] || 0;
+  const Badge = ({ n }) => n > 0 && (
+    <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold">{n}</span>
+  );
 
   useEffect(() => {
     mainRef.current?.scrollTo(0, 0);
@@ -136,16 +178,18 @@ export default function Layout() {
                 <NavLink
                   key={c.code} to={c.path} title={c.label} onClick={onNavigate}
                   className={({ isActive }) =>
-                    'flex items-center justify-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ' +
+                    'relative flex items-center justify-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ' +
                     (isActive ? 'bg-brand-600/20 text-brand-200' : 'text-slate-400 hover:bg-white/5 hover:text-white')
                   }
                 >
                   <span>{item.icon}</span>
+                  {badgeDe(c.code) > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-red-500" />}
                 </NavLink>
               ));
             }
 
             const abierto = openGroup === item.code;
+            const badgeGrupo = hijosVisibles.reduce((s, c) => s + badgeDe(c.code), 0);
             return (
               <div key={item.code}>
                 <button
@@ -158,6 +202,7 @@ export default function Layout() {
                 >
                   <span>{item.icon}</span>
                   <span className="flex-1 text-left whitespace-nowrap">{item.label}</span>
+                  {!abierto && <Badge n={badgeGrupo} />}
                   <span className={'text-xs transition-transform ' + (abierto ? 'rotate-90' : '')}>›</span>
                 </button>
                 {abierto && (
@@ -166,11 +211,12 @@ export default function Layout() {
                       <NavLink
                         key={c.code} to={c.path} onClick={onNavigate}
                         className={({ isActive }) =>
-                          'block px-3 py-2 rounded-lg text-sm transition-colors whitespace-nowrap ' +
+                          'flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-colors whitespace-nowrap ' +
                           (isActive ? 'bg-brand-600/20 text-brand-200 font-medium' : 'text-slate-400 hover:bg-white/5 hover:text-white')
                         }
                       >
-                        {c.label}
+                        <span>{c.label}</span>
+                        <Badge n={badgeDe(c.code)} />
                       </NavLink>
                     ))}
                   </div>

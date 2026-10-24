@@ -1,5 +1,6 @@
 import qz from 'qz-tray';
 import { getVentaTicketEscPos } from '../api/ventas';
+import { getMembresiaTicketEscPos } from '../api/membresias';
 import { getQzCertificate, signQzData } from '../api/qz';
 
 let securityConfigured = false;
@@ -64,7 +65,16 @@ export async function listPrinters() {
 
 export async function printVentaTicket(ventaId) {
   const res = await getVentaTicketEscPos(ventaId);
-  const hex = res.data?.data;
+  await imprimirHex(res.data?.data);
+}
+
+// Ticket de membresia (alta en mostrador o desde apartado en linea): mismo flujo QZ Tray.
+export async function printMembresiaTicket(membresiaId) {
+  const res = await getMembresiaTicketEscPos(membresiaId);
+  await imprimirHex(res.data?.data);
+}
+
+async function imprimirHex(hex) {
   if (!hex) throw new Error('El servidor no devolvio el contenido del ticket.');
 
   await ensureConnected();

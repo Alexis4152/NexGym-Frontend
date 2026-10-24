@@ -3,27 +3,41 @@ import * as centrosApi from '../api/centros';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useNotify } from '../context/NotifyContext.jsx';
 import { applyBrandColor } from '../utils/theme';
+import DomicilioForm, { domicilioDesde, validarDomicilio, erroresDomicilioDelServidor } from '../components/DomicilioForm.jsx';
+
+// El backend manda `domicilio` null mientras no se capture; el formulario siempre trabaja con un objeto.
+const conDomicilio = (c) => ({ ...c, domicilio: domicilioDesde(c.domicilio), direccionAnterior: !c.domicilio && c.direccion ? c.direccion : '' });
 
 export default function CentroInfo() {
   const { user, actingCentroId } = useAuth();
   const [form, setForm] = useState(null);
   const [subiendoLogo, setSubiendoLogo] = useState(false);
+  const [domicilioErrors, setDomicilioErrors] = useState({});
   const { notify } = useNotify();
   const centroId = user?.centroId || actingCentroId;
 
   useEffect(() => {
-    if (centroId) centrosApi.getCentro(centroId).then(({ data }) => setForm(data.data));
+    if (centroId) centrosApi.getCentro(centroId).then(({ data }) => setForm(conDomicilio(data.data)));
   }, [centroId]);
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const errs = validarDomicilio(form.domicilio);
+    setDomicilioErrors(errs);
+    if (Object.keys(errs).length) {
+      notify('El domicilio del centro es obligatorio: completa los campos marcados', 'error');
+      document.getElementById('domicilio-centro')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     try {
       const { data } = await centrosApi.updateCentro(centroId, form);
-      setForm(data.data);
+      setForm(conDomicilio(data.data));
       applyBrandColor(data.data.colorPrimario);
       notify('Configuracion actualizada', 'success');
     } catch (err) {
-      notify(err.response?.data?.message || 'No se pudo guardar', 'error');
+      const errsServidor = erroresDomicilioDelServidor(err.response?.data?.data);
+      setDomicilioErrors(errsServidor);
+      notify(Object.values(errsServidor)[0] || err.response?.data?.message || 'No se pudo guardar', 'error');
     }
   }
 
@@ -33,7 +47,8 @@ export default function CentroInfo() {
     setSubiendoLogo(true);
     try {
       const { data } = await centrosApi.uploadLogoCentro(centroId, file);
-      setForm(data.data);
+      // Conserva lo que el usuario lleve capturado en el formulario; solo cambia el logo.
+      setForm((f) => ({ ...f, logoUrl: data.data.logoUrl }));
       notify('Logo actualizado', 'success');
     } catch (err) {
       notify(err.response?.data?.message || 'No se pudo subir el logo', 'error');
@@ -63,9 +78,17 @@ export default function CentroInfo() {
             <input className="input" value={form.emailContacto || ''} onChange={(e) => setForm({ ...form, emailContacto: e.target.value })} />
           </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Direccion</label>
-          <input className="input" value={form.direccion || ''} onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
+        <div id="domicilio-centro">
+          <h2 className="font-semibold text-gray-800 mb-1">Domicilio del centro</h2>
+          <p className="text-xs text-gray-400 mb-2">Obligatorio. Aparece en tickets y en la tienda en línea.</p>
+          {!form.domicilio.codigoPostal && !form.domicilio.calle && (
+            <p className="text-xs bg-amber-50 text-amber-800 rounded px-2 py-1 mb-2">
+              Aún no has capturado el domicilio del centro.
+              {form.direccionAnterior && <> Dirección anterior: {form.direccionAnterior}</>}
+            </p>
+          )}
+          <DomicilioForm value={form.domicilio} errors={domicilioErrors}
+            onChange={(d) => setForm((f) => ({ ...f, domicilio: d }))} />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Color de marca</label>
@@ -168,10 +191,20 @@ export default function CentroInfo() {
           <input type="time" className="input w-40" value={form.horaCierreAutomaticoCorte ? form.horaCierreAutomaticoCorte.slice(0, 5) : ''}
             onChange={(e) => setForm({ ...form, horaCierreAutomaticoCorte: e.target.value || null })} />
           <p className="text-xs text-gray-400 mt-1">
-            Si al llegar esta hora alguien dejo un corte de caja abierto, el sistema lo cierra solo (sin gastos, marcado como "Sistema").
+            Si al llegar esta hora alguien dejo un corte de caja abierto, el sistema lo cierra solo (sin contar: se entrega el efectivo esperado, marcado como "Sistema").
             Vacio = desactivado.
           </p>
         </div>
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input type="checkbox" className="mt-1" checked={!!form.conteoCiego} onChange={(e) => setForm({ ...form, conteoCiego: e.target.checked })} />
+          <span>
+            <span className="text-sm font-medium text-gray-700">Conteo ciego</span>
+            <span className="block text-xs text-gray-400">
+              Mientras su corte está abierto, el cajero no ve cuánto efectivo debería haber: cuenta y cierra, y lo ve hasta después.
+              Dueño y administradores siempre lo ven.
+            </span>
+          </span>
+        </label>
 
         <button className="btn-primary w-full mt-2">Guardar cambios</button>
       </form>

@@ -7,9 +7,11 @@ import * as disciplinasApi from '../api/disciplinas';
 import * as cortesCajaApi from '../api/cortesCaja';
 import { useNotify } from '../context/NotifyContext.jsx';
 import { describirPlan, planLleno, textoCupo } from '../utils/planes.js';
+import InicioMembresiaSelector from './InicioMembresiaSelector.jsx';
+import MembresiaRegistradaPanel from './MembresiaRegistradaPanel.jsx';
 
 const emptyForm = {
-  alumnoId: '', planId: '', disciplinaIds: [], fechaInicio: new Date().toISOString().slice(0, 10),
+  alumnoId: '', planId: '', disciplinaIds: [],
   descuento: '0', montoPagoInicial: '', metodoPago: 'EFECTIVO',
 };
 
@@ -24,7 +26,11 @@ const LARGO_MINIMO_QR = 20;
 export default function RegistrarMembresiaForm({ planFijo, onSuccess, onCancel }) {
   const [planes, setPlanes] = useState(planFijo ? [planFijo] : []);
   const [disciplinas, setDisciplinas] = useState([]);
-  const [form, setForm] = useState({ ...emptyForm, planId: planFijo ? planFijo.id : '' });
+  const [form, setForm] = useState(() => ({ ...emptyForm, planId: planFijo ? planFijo.id : '' }));
+  // Alumno elegido completo (su sucursal es la "de preferencia" por defecto para la regla de inicio).
+  const [alumnoSel, setAlumnoSel] = useState(null);
+  // Inicio de vigencia: automatico por clases de hoy (default) o una fecha futura elegida.
+  const [inicio, setInicio] = useState({ modo: 'auto', fecha: '', sucursalId: '' });
   const [alumnoQuery, setAlumnoQuery] = useState('');
   const [alumnoResultados, setAlumnoResultados] = useState([]);
   const [submitting, setSubmitting] = useState(false);
@@ -51,6 +57,13 @@ export default function RegistrarMembresiaForm({ planFijo, onSuccess, onCancel }
 
   const planSeleccionado = planFijo || planes.find((p) => String(p.id) === String(form.planId));
   const totalContratado = planSeleccionado ? Math.max(0, Number(planSeleccionado.precio) - Number(form.descuento || 0)) : 0;
+  // Pago inicial = lo que entrega el cliente. En efectivo puede pasar del total: se abona hasta
+  // el total y el resto es cambio (mismo calculo que el backend).
+  const recibido = Number(form.montoPagoInicial || 0);
+  const esEfectivo = form.metodoPago === 'EFECTIVO';
+  const cambio = esEfectivo ? Math.max(0, recibido - totalContratado) : 0;
+  // Despues de registrar: pantalla final con cambio y ticket.
+  const [registrada, setRegistrada] = useState(null); // { membresia, cambio }
 
   function toggleDisciplina(id) {
     setForm((f) => {
@@ -68,6 +81,7 @@ export default function RegistrarMembresiaForm({ planFijo, onSuccess, onCancel }
     try {
       const { data } = await alumnosApi.buscarAlumnoPorQr(alumnoQuery.trim());
       setForm((f) => ({ ...f, alumnoId: data.data.id }));
+      setAlumnoSel(data.data);
       setAlumnoQuery(data.data.nombre);
       setAlumnoResultados([]);
     } catch {
@@ -97,8 +111,13 @@ export default function RegistrarMembresiaForm({ planFijo, onSuccess, onCancel }
       notify('Este plan ya alcanzo su cupo maximo de alumnos', 'error');
       return;
     }
+    if (!esEfectivo && recibido > totalContratado) {
+      notify(`Con ${form.metodoPago.toLowerCase()} no hay cambio: el pago no puede pasar del total ($${totalContratado.toFixed(2)})`, 'error');
+      return;
+    }
     const ok = await confirmDialog(
-      `¿Registrar membresia "${planSeleccionado.nombre}" para ${alumnoQuery} por $${totalContratado.toFixed(2)}?`
+      `¿Registrar membresia "${planSeleccionado.nombre}" para ${alumnoQuery} por $${totalContratado.toFixed(2)}?` +
+      (cambio > 0 ? ` Cambio a entregar: $${cambio.toFixed(2)}.` : '')
     );
     if (!ok) return;
 
@@ -108,17 +127,29 @@ export default function RegistrarMembresiaForm({ planFijo, onSuccess, onCancel }
         alumnoId: form.alumnoId,
         planId: form.planId,
         disciplinaIds: form.disciplinaIds,
-        fechaInicio: form.fechaInicio,
+        // null = automatico (el backend aplica la regla de clase disponible hoy)
+        fechaInicio: inicio.modo === 'fecha' && inicio.fecha ? inicio.fecha : null,
+        sucursalPreferidaId: inicio.sucursalId || null,
         descuento: Number(form.descuento || 0),
         montoPagoInicial: form.montoPagoInicial ? Number(form.montoPagoInicial) : null,
         metodoPago: form.metodoPago,
       });
-      onSuccess(data.data);
+      setRegistrada({ membresia: data.data, cambio });
     } catch (err) {
       notify(err.response?.data?.message || 'No se pudo registrar la membresia', 'error');
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (registrada) {
+    return (
+      <MembresiaRegistradaPanel
+        membresiaId={registrada.membresia.id}
+        cambio={registrada.cambio}
+        onListo={() => onSuccess(registrada.membresia)}
+      />
+    );
   }
 
   return (
@@ -139,7 +170,7 @@ export default function RegistrarMembresiaForm({ planFijo, onSuccess, onCancel }
                 type="button"
                 key={a.id}
                 className={'block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 ' + (form.alumnoId === a.id ? 'bg-brand-50 text-brand-700' : '')}
-                onClick={() => { setForm({ ...form, alumnoId: a.id }); setAlumnoQuery(a.nombre); setAlumnoResultados([]); }}
+                onClick={() => { setForm({ ...form, alumnoId: a.id }); setAlumnoSel(a); setAlumnoQuery(a.nombre); setAlumnoResultados([]); }}
               >
                 {a.nombre}
               </button>
@@ -206,23 +237,32 @@ export default function RegistrarMembresiaForm({ planFijo, onSuccess, onCancel }
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de inicio</label>
-          <input className="input" type="date" value={form.fechaInicio} onChange={(e) => setForm({ ...form, fechaInicio: e.target.value })} />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Descuento</label>
-          <input className="input" type="number" step="0.01" value={form.descuento} onChange={(e) => setForm({ ...form, descuento: e.target.value })} />
-        </div>
+      <InicioMembresiaSelector
+        planId={form.planId}
+        alumno={alumnoSel}
+        disciplinaIds={form.disciplinaIds}
+        value={inicio}
+        onChange={setInicio}
+      />
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Descuento</label>
+        <input className="input" type="number" step="0.01" value={form.descuento} onChange={(e) => setForm({ ...form, descuento: e.target.value })} />
       </div>
       {planSeleccionado && (
         <p className="text-sm text-gray-600">Total contratado: <strong>${totalContratado.toFixed(2)}</strong></p>
       )}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Pago inicial (opcional)</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {esEfectivo ? 'Recibido en efectivo (opcional)' : 'Pago inicial (opcional)'}
+          </label>
           <input className="input" type="number" step="0.01" value={form.montoPagoInicial} onChange={(e) => setForm({ ...form, montoPagoInicial: e.target.value })} />
+          {totalContratado > 0 && !form.montoPagoInicial && (
+            <button type="button" className="text-xs text-brand-600 hover:underline mt-1"
+              onClick={() => setForm({ ...form, montoPagoInicial: String(totalContratado) })}>
+              Cobrar exacto (${totalContratado.toFixed(2)})
+            </button>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Método</label>
@@ -234,6 +274,15 @@ export default function RegistrarMembresiaForm({ planFijo, onSuccess, onCancel }
           </select>
         </div>
       </div>
+      {cambio > 0 && (
+        <div className="flex justify-between items-center bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+          <span className="text-sm text-emerald-800">Cambio a entregar</span>
+          <span className="text-xl font-bold text-emerald-700">${cambio.toFixed(2)}</span>
+        </div>
+      )}
+      {!esEfectivo && recibido > totalContratado && (
+        <p className="text-xs text-red-600">Con {form.metodoPago.toLowerCase()} no hay cambio: el pago no puede pasar de ${totalContratado.toFixed(2)}.</p>
+      )}
       {planSeleccionado && !planSeleccionado.permiteAbonos && (
         <p className="text-xs text-gray-400">Este plan no permite abonos: deja el pago inicial en 0 para cobrar despues, o cubre el total.</p>
       )}

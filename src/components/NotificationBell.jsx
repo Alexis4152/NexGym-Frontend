@@ -88,7 +88,11 @@ export default function NotificationBell() {
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, leida: true } : x)));
       setCount((c) => Math.max(0, c - 1));
     }
-    if (n.alumnoId) {
+    // Apartados de la tienda en linea: llevan directo a la pestana correspondiente.
+    if (n.entidadTipo === 'APARTADO' || n.entidadTipo === 'APARTADO_PLAN') {
+      setOpen(false);
+      navigate(n.entidadTipo === 'APARTADO_PLAN' ? '/apartados?tab=planes' : '/apartados');
+    } else if (n.alumnoId) {
       setOpen(false);
       navigate(`/alumnos/${n.alumnoId}`);
     }

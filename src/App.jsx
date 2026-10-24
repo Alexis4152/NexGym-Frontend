@@ -38,6 +38,7 @@ import Usuarios from './pages/Usuarios.jsx';
 import Roles from './pages/Roles.jsx';
 import Centros from './pages/Centros.jsx';
 import CentroInfo from './pages/CentroInfo.jsx';
+import CorreoSistema from './pages/CorreoSistema.jsx';
 
 export default function App() {
   return (
@@ -130,6 +131,7 @@ export default function App() {
         <Route path="/centro-info" element={<PrivateRoute adminOnly><CentroInfo /></PrivateRoute>} />
         <Route path="/sucursales" element={<PrivateRoute section="CLASES"><Sucursales /></PrivateRoute>} />
         <Route path="/centros" element={<PrivateRoute superAdminOnly><Centros /></PrivateRoute>} />
+        <Route path="/correo-sistema" element={<PrivateRoute superAdminOnly><CorreoSistema /></PrivateRoute>} />
       </Route>
     </Routes>
   );

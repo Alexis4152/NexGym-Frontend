@@ -6,12 +6,13 @@ import {
 import * as reportesApi from '../api/reportes';
 import * as sucursalesApi from '../api/sucursales';
 import { useNotify } from '../context/NotifyContext.jsx';
+import { fechaLocalISO } from '../utils/fechas.js';
 
 const fmt = (n) => `$${Number(n ?? 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (n) => (n == null ? '—' : `${n >= 0 ? '▲' : '▼'} ${Math.abs(Number(n)).toFixed(1)}%`);
 
 function toISO(d) {
-  return d.toISOString().slice(0, 10);
+  return fechaLocalISO(d);
 }
 
 function presetRango(preset) {

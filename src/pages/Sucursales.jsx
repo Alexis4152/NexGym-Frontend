@@ -3,13 +3,15 @@ import * as sucursalesApi from '../api/sucursales';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
+import DomicilioForm, { domicilioDesde, domicilioVacio, validarDomicilio, erroresDomicilioDelServidor } from '../components/DomicilioForm.jsx';
 
-const emptySucursalForm = { nombre: '', direccion: '', notas: '' };
+const emptySucursalForm = () => ({ nombre: '', domicilio: domicilioVacio(), notas: '', direccionAnterior: '' });
 
 export default function Sucursales() {
   const [sucursales, setSucursales] = useState([]);
   const [modalSucursal, setModalSucursal] = useState(null);
   const [sucursalForm, setSucursalForm] = useState(emptySucursalForm);
+  const [domicilioErrors, setDomicilioErrors] = useState({});
   const { notify, confirmDialog } = useNotify();
   // isAdmin aqui significa Dueno o SUPER_ADMIN (ver AuthContext) -- un Admin/encargado
   // de sucursal (nivel ADMIN) solo puede VER la(s) suya(s), nunca crear/editar/desactivar.
@@ -24,12 +26,20 @@ export default function Sucursales() {
   }
 
   function openCreateSucursal() {
-    setSucursalForm(emptySucursalForm);
+    setSucursalForm(emptySucursalForm());
+    setDomicilioErrors({});
     setModalSucursal({ editing: null });
   }
 
   function openEditSucursal(s) {
-    setSucursalForm({ nombre: s.nombre, direccion: s.direccion || '', notas: s.notas || '' });
+    setSucursalForm({
+      nombre: s.nombre,
+      domicilio: domicilioDesde(s.domicilio),
+      notas: s.notas || '',
+      // Sucursales anteriores al formulario estructurado: se muestra el texto viejo como referencia.
+      direccionAnterior: !s.domicilio && s.direccion ? s.direccion : '',
+    });
+    setDomicilioErrors({});
     setModalSucursal({ editing: s.id });
   }
 
@@ -39,18 +49,27 @@ export default function Sucursales() {
       notify('El nombre de la sucursal es obligatorio', 'error');
       return;
     }
+    const errs = validarDomicilio(sucursalForm.domicilio);
+    setDomicilioErrors(errs);
+    if (Object.keys(errs).length) {
+      notify('Completa el domicilio de la sucursal', 'error');
+      return;
+    }
+    const payload = { nombre: sucursalForm.nombre, domicilio: sucursalForm.domicilio, notas: sucursalForm.notas };
     try {
       if (modalSucursal.editing) {
-        await sucursalesApi.updateSucursal(modalSucursal.editing, sucursalForm);
+        await sucursalesApi.updateSucursal(modalSucursal.editing, payload);
         notify('Sucursal actualizada', 'success');
       } else {
-        await sucursalesApi.createSucursal(sucursalForm);
+        await sucursalesApi.createSucursal(payload);
         notify('Sucursal creada', 'success');
       }
       setModalSucursal(null);
       loadSucursales();
     } catch (err) {
-      notify(err.response?.data?.message || 'No se pudo guardar la sucursal', 'error');
+      const errsServidor = erroresDomicilioDelServidor(err.response?.data?.data);
+      setDomicilioErrors(errsServidor);
+      notify(Object.values(errsServidor)[0] || err.response?.data?.message || 'No se pudo guardar la sucursal', 'error');
     }
   }
 
@@ -118,8 +137,15 @@ export default function Sucursales() {
               <input className="input" placeholder="Ej. Sucursal Norte" value={sucursalForm.nombre} onChange={(e) => setSucursalForm({ ...sucursalForm, nombre: e.target.value })} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Direccion</label>
-              <input className="input" value={sucursalForm.direccion} onChange={(e) => setSucursalForm({ ...sucursalForm, direccion: e.target.value })} />
+              <h3 className="text-sm font-semibold text-gray-800 mb-1">Domicilio</h3>
+              <p className="text-xs text-gray-400 mb-2">Se muestra en la tienda en línea para que el cliente sepa dónde recoger su apartado.</p>
+              {sucursalForm.direccionAnterior && (
+                <p className="text-xs bg-amber-50 text-amber-800 rounded px-2 py-1 mb-2">
+                  Dirección capturada anteriormente: {sucursalForm.direccionAnterior}
+                </p>
+              )}
+              <DomicilioForm value={sucursalForm.domicilio} errors={domicilioErrors}
+                onChange={(d) => setSucursalForm((f) => ({ ...f, domicilio: d }))} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Notas (opcional)</label>
