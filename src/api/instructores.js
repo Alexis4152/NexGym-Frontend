@@ -12,9 +12,10 @@ export const subirFotoInstructor = (id, file) => {
 };
 
 export const listDocumentosInstructor = (id) => api.get(`/instructores/${id}/documentos`);
-export const subirDocumentoInstructor = (id, disciplinaId, file) => {
+/** Un solo diploma por instructor: subir otro reemplaza al anterior. */
+export const subirDocumentoInstructor = (id, file) => {
   const formData = new FormData();
   formData.append('file', file);
-  return api.post(`/instructores/${id}/documentos`, formData, { params: { disciplinaId } });
+  return api.post(`/instructores/${id}/documentos`, formData);
 };
 export const eliminarDocumentoInstructor = (id, documentoId) => api.delete(`/instructores/${id}/documentos/${documentoId}`);

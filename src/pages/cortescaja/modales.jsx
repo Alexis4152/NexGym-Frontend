@@ -8,6 +8,7 @@ import {
   fmt, fmtFecha, Fila, ListaMovimientos, SubirComprobante, useConfirmacionMonto,
   METODO_CONTEO_LABEL, DESTINO_RETIRO,
 } from './comun.jsx';
+import { confirmarAccion, confirmarGuardado } from '../../utils/confirmaciones.js';
 
 const errorDe = (err, def) => err.response?.data?.message || def;
 
@@ -18,7 +19,7 @@ const errorDe = (err, def) => err.response?.data?.message || def;
  * confirma que esta de acuerdo. Si no coincide, la nota es obligatoria.
  */
 export function AbrirCorteModal({ caja, onClose, onAbierto }) {
-  const { notify } = useNotify();
+  const { notify, confirmDialog } = useNotify();
   const conf = useConfirmacionMonto();
   const pend = caja.pendiente || {};
   const esperado = pend.monto;
@@ -33,6 +34,9 @@ export function AbrirCorteModal({ caja, onClose, onAbierto }) {
     if (contado === '') { notify('Escribe cuánto efectivo contaste', 'error'); return; }
     if (difiere && !nota.trim()) { notify('Lo que contaste no coincide: escribe una nota', 'error'); return; }
     if (!deAcuerdo) { notify('Confirma que contaste el efectivo y estás de acuerdo', 'error'); return; }
+    if (!(await confirmarAccion(confirmDialog,
+      `¿Abrir tu corte en ${caja.nombre} recibiendo ${fmt(contado)} en efectivo?`,
+      { title: 'Confirmar apertura de corte', confirmLabel: 'Sí, abrir' }))) return;
     setEnviando(true);
     try {
       await cortesCajaApi.abrirCorteCaja({
@@ -187,7 +191,7 @@ const TIPOS = {
 
 /** Registrar una entrada o salida de efectivo dentro del corte abierto. */
 export function MovimientoCorteModal({ corte, grupo, esAdmin, cajas, onClose, onRegistrado }) {
-  const { notify } = useNotify();
+  const { notify, confirmDialog } = useNotify();
   const opciones = TIPOS[grupo].filter((t) => !t.soloAdmin || esAdmin);
   const [form, setForm] = useState({ tipo: opciones[0].value, monto: '', concepto: '', categoriaId: '', destino: '', personaId: '', cajaContraparteId: '', referencia: '', comprobanteUrl: null });
   const [categorias, setCategorias] = useState([]);
@@ -205,6 +209,9 @@ export function MovimientoCorteModal({ corte, grupo, esAdmin, cajas, onClose, on
   async function enviar(e) {
     e.preventDefault();
     if (!form.monto || Number(form.monto) <= 0) { notify('Captura un monto mayor a cero', 'error'); return; }
+    const tipoLabel = opciones.find((t) => t.value === form.tipo)?.label.replace(/ \(.*\)$/, '') || form.tipo;
+    if (!(await confirmarAccion(confirmDialog, `¿Registrar ${tipoLabel.toLowerCase()} por ${fmt(form.monto)}?`,
+      { title: 'Confirmar movimiento de efectivo', confirmLabel: 'Sí, registrar' }))) return;
     setEnviando(true);
     try {
       await cortesCajaApi.registrarMovimientoCorte(corte.id, {
@@ -378,7 +385,7 @@ export function ForzarCierreModal({ corte, onClose, onCerrado }) {
 // ------------------------------------------------------------------ caja cerrada
 /** Retirar o agregar efectivo con la caja cerrada (entre turnos). */
 export function MovimientoCajaCerradaModal({ caja, tipo, onClose, onRegistrado }) {
-  const { notify } = useNotify();
+  const { notify, confirmDialog } = useNotify();
   const actual = Number(caja.pendiente?.monto ?? 0);
   const [form, setForm] = useState({ monto: '', concepto: '', destino: '', referencia: '', contar: false, restanteContado: '' });
   const [enviando, setEnviando] = useState(false);
@@ -388,6 +395,9 @@ export function MovimientoCajaCerradaModal({ caja, tipo, onClose, onRegistrado }
   async function enviar(e) {
     e.preventDefault();
     if (!form.monto || Number(form.monto) <= 0) { notify('Captura un monto mayor a cero', 'error'); return; }
+    if (!(await confirmarAccion(confirmDialog,
+      `¿${tipo === 'RETIRO' ? 'Retirar' : 'Agregar'} ${fmt(form.monto)} ${tipo === 'RETIRO' ? 'de' : 'a'} ${caja.nombre}? Quedarán ${fmt(restante)}.`,
+      { title: 'Confirmar movimiento de efectivo', confirmLabel: tipo === 'RETIRO' ? 'Sí, retirar' : 'Sí, agregar' }))) return;
     setEnviando(true);
     try {
       await cajasApi.movimientoCajaCerrada(caja.id, {
@@ -445,7 +455,7 @@ export function MovimientoCajaCerradaModal({ caja, tipo, onClose, onRegistrado }
 
 /** Alta o edicion de una caja. */
 export function CajaFormModal({ caja, sucursales, onClose, onGuardado }) {
-  const { notify } = useNotify();
+  const { notify, confirmDialog } = useNotify();
   const [nombre, setNombre] = useState(caja?.nombre || '');
   const [sucursalId, setSucursalId] = useState(caja?.sucursalId || (sucursales.length === 1 ? sucursales[0].id : ''));
   const [activo, setActivo] = useState(caja ? caja.activo : true);
@@ -453,6 +463,7 @@ export function CajaFormModal({ caja, sucursales, onClose, onGuardado }) {
 
   async function enviar(e) {
     e.preventDefault();
+    if (!(await confirmarGuardado(confirmDialog, { editando: !!caja, que: 'la caja', nombre }))) return;
     setEnviando(true);
     try {
       if (caja) await cajasApi.updateCajaRegistradora(caja.id, { nombre, activo });

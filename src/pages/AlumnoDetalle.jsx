@@ -8,6 +8,7 @@ import { useNotify } from '../context/NotifyContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
 import { generarQrDataUrl } from '../utils/qr.js';
+import { confirmarAccion } from '../utils/confirmaciones.js';
 
 const ESTADO_COLOR = {
   PENDIENTE: 'bg-amber-100 text-amber-700',
@@ -47,8 +48,10 @@ export default function AlumnoDetalle() {
   const [qrImagen, setQrImagen] = useState(null);
   const [regenerandoQr, setRegenerandoQr] = useState(false);
   const { notify, confirmDialog } = useNotify();
-  const { hasPermiso } = useAuth();
-  const puedeEditar = hasPermiso('ALUMNOS_EDITAR');
+  const { user, hasPermiso } = useAuth();
+  // Un instructor solo consulta los datos del alumno: sin editar ni gestionar membresias.
+  const esInstructor = !!user?.esInstructor;
+  const puedeEditar = !esInstructor && hasPermiso('ALUMNOS_EDITAR');
   const pagosRef = useRef(null);
 
   function verPagos(m) {
@@ -58,10 +61,11 @@ export default function AlumnoDetalle() {
 
   useEffect(() => {
     cargarAlumno();
+    disciplinasApi.listDisciplinasActivas().then(({ data }) => setDisciplinas(data.data));
+    if (esInstructor) return;
     cargarMembresias();
     planesApi.listMembresiaPlanesActivos().then(({ data }) => setPlanes(data.data));
-    disciplinasApi.listDisciplinasActivas().then(({ data }) => setDisciplinas(data.data));
-  }, [id]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (alumno?.codigoQr) generarQrDataUrl(alumno.codigoQr).then(setQrImagen);
@@ -93,6 +97,9 @@ export default function AlumnoDetalle() {
 
   async function handleRegistrarPago(e) {
     e.preventDefault();
+    if (!(await confirmarAccion(confirmDialog,
+      `¿Registrar un pago de $${Number(pagoForm.monto || 0).toFixed(2)} (${pagoForm.metodoPago}) a la membresía ${seleccionada.planNombre || ''}?`,
+      { title: 'Confirmar pago', confirmLabel: 'Sí, registrar' }))) return;
     try {
       await membresiasApi.registrarPagoMembresia(seleccionada.id, { monto: Number(pagoForm.monto), metodoPago: pagoForm.metodoPago });
       notify('Pago registrado', 'success');
@@ -140,6 +147,9 @@ export default function AlumnoDetalle() {
 
   async function handleRenovar(e) {
     e.preventDefault();
+    if (!(await confirmarAccion(confirmDialog,
+      `¿Renovar la membresía con el plan ${planSeleccionadoRenovar?.nombre || ''}?`,
+      { title: 'Confirmar renovación', confirmLabel: 'Sí, renovar' }))) return;
     try {
       await membresiasApi.renovarMembresia(seleccionada.id, {
         planId: renovarForm.planId,
@@ -157,6 +167,7 @@ export default function AlumnoDetalle() {
   }
 
   async function handleReanudar() {
+    if (!(await confirmarAccion(confirmDialog, '¿Reanudar esta membresía?', { title: 'Confirmar reanudación', confirmLabel: 'Sí, reanudar' }))) return;
     try {
       await membresiasApi.reanudarMembresia(seleccionada.id);
       notify('Membresía reanudada', 'success');
@@ -173,6 +184,10 @@ export default function AlumnoDetalle() {
       notify('El motivo es obligatorio', 'error');
       return;
     }
+    if (!(await confirmarAccion(confirmDialog,
+      accion === 'suspender' ? '¿Suspender esta membresía?' : '¿Cancelar esta membresía? Esta acción no se puede deshacer.',
+      { title: accion === 'suspender' ? 'Confirmar suspensión' : 'Confirmar cancelación',
+        confirmLabel: accion === 'suspender' ? 'Sí, suspender' : 'Sí, cancelar', danger: true }))) return;
     try {
       if (accion === 'suspender') {
         await membresiasApi.suspenderMembresia(seleccionada.id, motivo);

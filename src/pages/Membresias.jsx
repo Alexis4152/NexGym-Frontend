@@ -9,6 +9,7 @@ import Pagination from '../components/Pagination.jsx';
 import RegistrarMembresiaForm from '../components/RegistrarMembresiaForm.jsx';
 import ApartadosPlanPanel from '../components/ApartadosPlanPanel.jsx';
 import { hoyLocal } from '../utils/fechas.js';
+import { confirmarAccion } from '../utils/confirmaciones.js';
 
 const ESTADO_COLOR = {
   PENDIENTE: 'bg-amber-100 text-amber-700',
@@ -31,7 +32,7 @@ export default function Membresias() {
   const [modalAsignar, setModalAsignar] = useState(false);
   const [modalMotivo, setModalMotivo] = useState(null); // { id, motivo }
   const [corteAbierto, setCorteAbierto] = useState(null);
-  const { notify } = useNotify();
+  const { notify, confirmDialog } = useNotify();
   // Pestana "Apartados en línea": membresias apartadas desde la tienda que esperan su alta
   // (mismo panel que Apartados > Planes). ?tab=apartados la abre directo.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -75,6 +76,8 @@ export default function Membresias() {
       notify('El motivo es obligatorio', 'error');
       return;
     }
+    if (!(await confirmarAccion(confirmDialog, '¿Cancelar esta membresía? Esta acción no se puede deshacer.',
+      { title: 'Confirmar cancelación', confirmLabel: 'Sí, cancelar', danger: true }))) return;
     try {
       await membresiasApi.cancelarMembresia(modalMotivo.id, modalMotivo.motivo);
       notify('Membresia cancelada', 'success');

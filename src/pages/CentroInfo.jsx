@@ -3,6 +3,7 @@ import * as centrosApi from '../api/centros';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useNotify } from '../context/NotifyContext.jsx';
 import { applyBrandColor } from '../utils/theme';
+import { confirmarAccion, confirmarGuardado } from '../utils/confirmaciones.js';
 import DomicilioForm, { domicilioDesde, validarDomicilio, erroresDomicilioDelServidor } from '../components/DomicilioForm.jsx';
 
 // El backend manda `domicilio` null mientras no se capture; el formulario siempre trabaja con un objeto.
@@ -13,7 +14,7 @@ export default function CentroInfo() {
   const [form, setForm] = useState(null);
   const [subiendoLogo, setSubiendoLogo] = useState(false);
   const [domicilioErrors, setDomicilioErrors] = useState({});
-  const { notify } = useNotify();
+  const { notify, confirmDialog } = useNotify();
   const centroId = user?.centroId || actingCentroId;
 
   useEffect(() => {
@@ -29,6 +30,7 @@ export default function CentroInfo() {
       document.getElementById('domicilio-centro')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
+    if (!(await confirmarGuardado(confirmDialog, { editando: true, que: 'la configuración del centro', nombre: form.nombre }))) return;
     try {
       const { data } = await centrosApi.updateCentro(centroId, form);
       setForm(conDomicilio(data.data));
@@ -44,6 +46,10 @@ export default function CentroInfo() {
   async function handleSubirLogo(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!(await confirmarAccion(confirmDialog, `¿Cambiar el logo del centro por "${file.name}"?`))) {
+      e.target.value = '';
+      return;
+    }
     setSubiendoLogo(true);
     try {
       const { data } = await centrosApi.uploadLogoCentro(centroId, file);

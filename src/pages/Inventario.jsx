@@ -6,6 +6,7 @@ import { useNotify } from '../context/NotifyContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
+import { confirmarAccion, confirmarGuardado } from '../utils/confirmaciones.js';
 
 const emptyForm = {
   sucursalId: '', categoriaIds: [], nombre: '', tipo: 'EQUIPO', codigoBarras: '', stock: 0, stockMinimo: 0,
@@ -127,10 +128,15 @@ export default function Inventario() {
 
   async function handleCrearCategoria() {
     if (!nuevaCategoria.trim()) return;
-    const { data } = await inventarioApi.createCategoriaInventario({ nombre: nuevaCategoria });
-    setNuevaCategoria('');
-    loadCategorias();
-    setForm((f) => ({ ...f, categoriaIds: [...f.categoriaIds, data.data.id] }));
+    if (!(await confirmarGuardado(confirmDialog, { editando: false, que: 'la categoría', nombre: nuevaCategoria }))) return;
+    try {
+      const { data } = await inventarioApi.createCategoriaInventario({ nombre: nuevaCategoria });
+      setNuevaCategoria('');
+      loadCategorias();
+      setForm((f) => ({ ...f, categoriaIds: [...f.categoriaIds, data.data.id] }));
+    } catch (err) {
+      notify(err.response?.data?.message || 'No se pudo crear la categoria', 'error');
+    }
   }
 
   async function handleSubmit(e) {
@@ -152,6 +158,7 @@ export default function Inventario() {
       precioVenta: form.precioVenta === '' ? null : Number(form.precioVenta),
       descuentoApartadoPorcentaje: form.descuentoApartadoPorcentaje === '' ? null : Number(form.descuentoApartadoPorcentaje),
     };
+    if (!(await confirmarGuardado(confirmDialog, { editando: !!modal.editing, que: 'el artículo', nombre: form.nombre }))) return;
     try {
       if (modal.editing) {
         await inventarioApi.updateArticulo(modal.editing, payload);
@@ -172,6 +179,10 @@ export default function Inventario() {
   async function handleSubirImagen(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!(await confirmarAccion(confirmDialog, `¿Agregar la foto "${file.name}" a "${form.nombre}"?`))) {
+      e.target.value = '';
+      return;
+    }
     setSubiendoImagen(true);
     try {
       await inventarioApi.subirImagenArticulo(modal.editing, file);
@@ -186,6 +197,7 @@ export default function Inventario() {
   }
 
   async function marcarPrincipal(imagenId) {
+    if (!(await confirmarAccion(confirmDialog, '¿Usar esta foto como la principal del artículo?'))) return;
     await inventarioApi.marcarImagenPrincipal(modal.editing, imagenId);
     loadImagenes(modal.editing);
     load();
@@ -209,8 +221,12 @@ export default function Inventario() {
 
   async function handleAjuste(e) {
     e.preventDefault();
+    const delta = Number(ajusteDelta);
+    if (!(await confirmarAccion(confirmDialog,
+      `¿${delta >= 0 ? 'Sumar' : 'Restar'} ${Math.abs(delta)} pieza(s) al stock de "${modalAjuste.nombre}"?`,
+      { title: 'Confirmar ajuste de stock', confirmLabel: 'Sí, ajustar' }))) return;
     try {
-      await inventarioApi.ajustarStock(modalAjuste.id, Number(ajusteDelta), ajusteRazon);
+      await inventarioApi.ajustarStock(modalAjuste.id, delta, ajusteRazon);
       notify('Stock actualizado', 'success');
       setModalAjuste(null);
       setAjusteDelta(1);

@@ -6,6 +6,7 @@ import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from './Modal.jsx';
 import Pagination from './Pagination.jsx';
 import ConvertirApartadoPlanModal from './ConvertirApartadoPlanModal.jsx';
+import { confirmarAccion } from '../utils/confirmaciones.js';
 
 const ESTADOS_PLAN = ['PENDIENTE', 'CONVERTIDO', 'CANCELADO'];
 const ESTADO_PLAN_COLOR = {
@@ -32,7 +33,7 @@ export default function ApartadosPlanPanel({ estadoInicial = '', recargarToken, 
   const [modalCancelar, setModalCancelar] = useState(null);
   const [motivo, setMotivo] = useState('');
   const [modalConvertir, setModalConvertir] = useState(null);
-  const { notify } = useNotify();
+  const { notify, confirmDialog } = useNotify();
   const hayFiltros = filtros.estado !== estadoInicial || filtros.desde || filtros.hasta || filtros.q;
 
   useEffect(() => {
@@ -62,6 +63,9 @@ export default function ApartadosPlanPanel({ estadoInicial = '', recargarToken, 
 
   async function handleCancelar(e) {
     e.preventDefault();
+    if (!(await confirmarAccion(confirmDialog,
+      `¿Cancelar el apartado del plan ${modalCancelar.planNombre || ''} de ${modalCancelar.clienteNombre || 'este cliente'}?`,
+      { title: 'Confirmar cancelación', confirmLabel: 'Sí, cancelar', danger: true }))) return;
     try {
       await apartadosPlanApi.cancelarApartadoPlan(modalCancelar.id, { motivo: motivo || null });
       notify('Apartado cancelado', 'success');

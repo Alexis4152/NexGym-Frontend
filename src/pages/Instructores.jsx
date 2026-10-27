@@ -6,8 +6,14 @@ import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
 import PhoneInput from '../components/PhoneInput.jsx';
+import { confirmarAccion, confirmarGuardado } from '../utils/confirmaciones.js';
 
-const emptyForm = { nombre: '', telefono: '', email: '', especialidad: '', disciplinaIds: [], sucursalIds: [], fotoUrl: null };
+// `email` = correo de ACCESO (su usuario de login); `emailPersonal` = contacto, opcional.
+const emptyForm = { nombre: '', telefono: '', email: '', emailPersonal: '', especialidad: '', disciplinaIds: [], sucursalIds: [], fotoUrl: null, usuarioId: null };
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Mismas reglas que DocumentoInstructorService en el backend.
+const TIPOS_DOCUMENTO = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+const MAX_DOCUMENTO_BYTES = 5 * 1024 * 1024;
 
 export default function Instructores() {
   const [pageData, setPageData] = useState({ content: [], totalPages: 0 });
@@ -21,7 +27,6 @@ export default function Instructores() {
   const [documentos, setDocumentos] = useState([]);
   const [subiendoDocumento, setSubiendoDocumento] = useState(false);
   const [subiendoFoto, setSubiendoFoto] = useState(false);
-  const [disciplinaDocumento, setDisciplinaDocumento] = useState('');
   const { notify, confirmDialog } = useNotify();
 
   useEffect(() => {
@@ -47,17 +52,17 @@ export default function Instructores() {
     setForm(emptyForm);
     setErrors({});
     setDocumentos([]);
-    setDisciplinaDocumento('');
     setModal({ editing: null });
   }
 
   function openEdit(i) {
     setForm({
-      nombre: i.nombre, telefono: i.telefono || '', email: i.email || '', especialidad: i.especialidad || '',
+      nombre: i.nombre, telefono: i.telefono || '', email: i.email || '', emailPersonal: i.emailPersonal || '',
+      especialidad: i.especialidad || '',
       disciplinaIds: i.disciplinaIds || [], sucursalIds: i.sucursalIds || [], fotoUrl: i.fotoUrl || null,
+      usuarioId: i.usuarioId || null,
     });
     setErrors({});
-    setDisciplinaDocumento('');
     loadDocumentos(i.id);
     setModal({ editing: i.id });
   }
@@ -65,6 +70,10 @@ export default function Instructores() {
   async function handleSubirFoto(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!(await confirmarAccion(confirmDialog, `¿Cambiar la foto de "${form.nombre}" por "${file.name}"?`))) {
+      e.target.value = '';
+      return;
+    }
     setSubiendoFoto(true);
     try {
       const { data } = await instructoresApi.subirFotoInstructor(modal.editing, file);
@@ -98,38 +107,72 @@ export default function Instructores() {
       setErrors({ nombre: 'El nombre es obligatorio' });
       return;
     }
+    if (!EMAIL_RE.test(form.email.trim())) {
+      setErrors({ email: 'Captura el correo de acceso: será su usuario para iniciar sesión' });
+      return;
+    }
+    if (form.emailPersonal.trim() && !EMAIL_RE.test(form.emailPersonal.trim())) {
+      setErrors({ emailPersonal: 'Captura un correo válido' });
+      return;
+    }
     if (form.disciplinaIds.length === 0) {
       setErrors({ disciplinaIds: 'Selecciona al menos una disciplina' });
       return;
     }
+    if (!form.usuarioId) {
+      const ok = await confirmDialog(
+        `Se creará el acceso al sistema de ${form.nombre.trim()} con el usuario ${form.email.trim().toLowerCase()}. ` +
+        'Le llegará a ese correo una contraseña temporal. ¿Continuar?',
+        { title: modal.editing ? 'Confirmar cambios' : 'Confirmar registro', confirmLabel: 'Sí, continuar' });
+      if (!ok) return;
+    } else if (!(await confirmarGuardado(confirmDialog, { editando: true, que: 'al instructor', nombre: form.nombre }))) {
+      return;
+    }
+    const payload = { ...form, email: form.email.trim(), emailPersonal: form.emailPersonal.trim() || null };
     try {
       if (modal.editing) {
-        await instructoresApi.updateInstructor(modal.editing, form);
-        notify('Instructor actualizado', 'success');
+        const { data } = await instructoresApi.updateInstructor(modal.editing, payload);
+        notify(form.usuarioId ? 'Instructor actualizado' : `Instructor actualizado. Su usuario de acceso es ${data.data.email}`, 'success');
         setModal(null);
       } else {
-        const { data } = await instructoresApi.createInstructor(form);
-        notify('Instructor creado, ya puedes subir sus diplomas', 'success');
+        const { data } = await instructoresApi.createInstructor(payload);
+        notify(`Instructor creado. Su usuario de acceso es ${data.data.email}; ya puedes subir su diploma`, 'success');
+        setForm((f) => ({ ...f, email: data.data.email, usuarioId: data.data.usuarioId }));
         setModal({ editing: data.data.id });
         setDocumentos([]);
       }
       load();
     } catch (err) {
-      setErrors(err.response?.data?.data || {});
+      const data = err.response?.data?.data;
+      const errs = data && typeof data === 'object' ? data : {};
+      setErrors(errs);
+      notify(Object.values(errs)[0] || err.response?.data?.message || 'No se pudo guardar el instructor', 'error');
     }
   }
 
   async function handleSubirDocumento(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!disciplinaDocumento) {
-      notify('Selecciona a que disciplina corresponde el documento', 'error');
+    if (!TIPOS_DOCUMENTO.includes(file.type)) {
+      notify('Solo se aceptan diplomas o constancias en PDF o imagen (JPG, PNG, WEBP)', 'error');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > MAX_DOCUMENTO_BYTES) {
+      notify(`El archivo pesa ${(file.size / 1024 / 1024).toFixed(1)} MB; el máximo es 5 MB`, 'error');
+      e.target.value = '';
+      return;
+    }
+    const mensaje = documentos.length
+      ? `¿Reemplazar el diploma actual por "${file.name}"? El anterior se eliminará.`
+      : `¿Subir "${file.name}" como diploma de ${form.nombre}?`;
+    if (!(await confirmarAccion(confirmDialog, mensaje))) {
       e.target.value = '';
       return;
     }
     setSubiendoDocumento(true);
     try {
-      await instructoresApi.subirDocumentoInstructor(modal.editing, disciplinaDocumento, file);
+      await instructoresApi.subirDocumentoInstructor(modal.editing, file);
       loadDocumentos(modal.editing);
     } catch (err) {
       notify(err.response?.data?.message || 'No se pudo subir el documento', 'error');
@@ -147,7 +190,8 @@ export default function Instructores() {
   }
 
   async function handleDeactivate(i) {
-    const ok = await confirmDialog(`Desactivar a ${i.nombre}?`, { danger: true });
+    const ok = await confirmDialog(
+      `Desactivar a ${i.nombre}?${i.usuarioId ? ' También se le quitará el acceso al sistema.' : ''}`, { danger: true });
     if (!ok) return;
     await instructoresApi.deactivateInstructor(i.id);
     notify('Instructor desactivado', 'success');
@@ -182,7 +226,12 @@ export default function Instructores() {
                 <td className="py-2 font-medium text-gray-800">{i.nombre}</td>
                 <td className="text-gray-600">{i.disciplinaNombres?.join(', ') || '-'}</td>
                 {sucursales.length > 1 && <td className="text-gray-500">{i.sucursalNombres?.join(', ') || 'Todas'}</td>}
-                <td className="text-gray-600">{i.telefono || i.email || '-'}</td>
+                <td className="text-gray-600">
+                  {i.telefono || i.emailPersonal || '-'}
+                  {i.usuarioId
+                    ? <span className="block text-xs text-gray-400">Acceso: {i.email}</span>
+                    : <span className="block text-xs text-amber-600">Sin acceso al sistema</span>}
+                </td>
                 <td className="text-right space-x-2">
                   <button className="text-brand-600 hover:underline" onClick={() => openEdit(i)}>
                     Editar
@@ -232,9 +281,33 @@ export default function Instructores() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Telefono</label>
               <PhoneInput value={form.telefono} onChange={(v) => setForm({ ...form, telefono: v })} />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Correo</label>
-              <input className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <div className="rounded-lg border border-brand-100 bg-brand-50/40 p-3 space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Correo de acceso <span className="text-red-500">*</span>
+                </label>
+                <input className="input" type="email" autoComplete="off" placeholder="instructor@tugimnasio.com"
+                  value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                {errors.email
+                  ? <p className="text-xs text-red-600 mt-1">{errors.email}</p>
+                  : (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Será su <span className="font-medium">usuario para iniciar sesión</span>. Puede ser un correo institucional o el personal.
+                      {form.usuarioId ? ' Si lo cambias, su usuario de login cambia también.' : ' Al guardar se le envía una contraseña temporal.'}
+                    </p>
+                  )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Correo personal (opcional)</label>
+                <input className="input" type="email" autoComplete="off" placeholder="Para contactarlo si el de acceso es institucional"
+                  value={form.emailPersonal} onChange={(e) => setForm({ ...form, emailPersonal: e.target.value })} />
+                {errors.emailPersonal && <p className="text-xs text-red-600 mt-1">{errors.emailPersonal}</p>}
+              </div>
+              {modal.editing && !form.usuarioId && (
+                <p className="text-xs bg-amber-50 text-amber-800 rounded px-2 py-1">
+                  Este instructor aún no tiene acceso al sistema: al guardar se creará con el correo de acceso.
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Especialidad</label>
@@ -285,15 +358,17 @@ export default function Instructores() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Diplomas / Titulos</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Diploma / Título</label>
               {modal.editing ? (
                 <div className="space-y-2">
                   {documentos.length > 0 && (
+                    // Un solo archivo por instructor; si quedaron varios de antes, se ven aqui hasta
+                    // que se suba uno nuevo (que los reemplaza a todos).
                     <ul className="divide-y divide-gray-100 border border-gray-200 rounded-lg">
                       {documentos.map((d) => (
                         <li key={d.id} className="flex items-center justify-between px-3 py-2 text-sm">
                           <a href={d.ruta} target="_blank" rel="noreferrer" className="text-brand-600 hover:underline truncate">
-                            {d.disciplinaNombre} — {d.nombreOriginal || 'documento'}
+                            {d.nombreOriginal || 'documento'}
                           </a>
                           <button type="button" className="text-red-600 text-xs hover:underline shrink-0 ml-2" onClick={() => eliminarDocumento(d.id)}>
                             Quitar
@@ -302,21 +377,16 @@ export default function Instructores() {
                       ))}
                     </ul>
                   )}
-                  <div className="flex gap-2">
-                    <select className="input flex-1" value={disciplinaDocumento} onChange={(e) => setDisciplinaDocumento(e.target.value)}>
-                      <option value="">Selecciona disciplina...</option>
-                      {disciplinas.filter((d) => form.disciplinaIds.includes(d.id)).map((d) => (
-                        <option key={d.id} value={d.id}>{d.nombre}</option>
-                      ))}
-                    </select>
-                    <label className="btn-secondary shrink-0 cursor-pointer flex items-center px-3 text-sm">
-                      {subiendoDocumento ? '...' : '+ Archivo'}
-                      <input type="file" accept="image/png,image/jpeg,image/webp,application/pdf" className="hidden" onChange={handleSubirDocumento} disabled={subiendoDocumento} />
-                    </label>
-                  </div>
+                  <label className="btn-secondary cursor-pointer inline-flex items-center px-3 text-sm">
+                    {subiendoDocumento ? 'Subiendo...' : documentos.length ? 'Reemplazar archivo' : '+ Subir archivo'}
+                    <input type="file" accept="image/png,image/jpeg,image/webp,application/pdf" className="hidden" onChange={handleSubirDocumento} disabled={subiendoDocumento} />
+                  </label>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Un solo archivo por instructor (diploma, certificado o constancia), en PDF o imagen (JPG, PNG, WEBP). Máximo 5 MB.
+                  </p>
                 </div>
               ) : (
-                <p className="text-xs text-gray-400">Guarda el instructor primero; despues podras subir sus diplomas aqui mismo.</p>
+                <p className="text-xs text-gray-400">Guarda el instructor primero; después podrás subir su diploma aquí mismo.</p>
               )}
             </div>
             <button className="btn-primary w-full mt-2">{modal.editing ? 'Guardar cambios' : 'Crear instructor'}</button>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import * as proveedoresApi from '../api/proveedores';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
+import { confirmarGuardado } from '../utils/confirmaciones.js';
 
 const emptyProveedor = { nombre: '', contacto: '', telefono: '', email: '', notas: '' };
 
@@ -9,7 +10,7 @@ export default function Proveedores() {
   const [proveedores, setProveedores] = useState([]);
   const [modalProveedor, setModalProveedor] = useState(false);
   const [proveedorForm, setProveedorForm] = useState(emptyProveedor);
-  const { notify } = useNotify();
+  const { notify, confirmDialog } = useNotify();
 
   useEffect(() => {
     loadProveedores();
@@ -21,11 +22,16 @@ export default function Proveedores() {
 
   async function handleCrearProveedor(e) {
     e.preventDefault();
-    await proveedoresApi.createProveedor(proveedorForm);
-    notify('Proveedor creado', 'success');
-    setModalProveedor(false);
-    setProveedorForm(emptyProveedor);
-    loadProveedores();
+    if (!(await confirmarGuardado(confirmDialog, { editando: false, que: 'al proveedor', nombre: proveedorForm.nombre }))) return;
+    try {
+      await proveedoresApi.createProveedor(proveedorForm);
+      notify('Proveedor creado', 'success');
+      setModalProveedor(false);
+      setProveedorForm(emptyProveedor);
+      loadProveedores();
+    } catch (err) {
+      notify(err.response?.data?.message || 'No se pudo crear el proveedor', 'error');
+    }
   }
 
   return (

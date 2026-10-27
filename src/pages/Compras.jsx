@@ -4,6 +4,7 @@ import * as comprasApi from '../api/compras';
 import * as inventarioApi from '../api/inventario';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
+import { confirmarAccion } from '../utils/confirmaciones.js';
 
 const emptyItem = { articuloId: '', descripcion: '', cantidad: 1, costoUnitario: '' };
 
@@ -14,7 +15,7 @@ export default function Compras() {
   const [modalCompra, setModalCompra] = useState(false);
   const [compraForm, setCompraForm] = useState({ proveedorId: '', fechaPlaneada: '', notas: '' });
   const [items, setItems] = useState([{ ...emptyItem }]);
-  const { notify } = useNotify();
+  const { notify, confirmDialog } = useNotify();
 
   useEffect(() => {
     proveedoresApi.listProveedores(0, 100).then(({ data }) => setProveedores(data.data.content));
@@ -42,6 +43,11 @@ export default function Compras() {
       notify('Completa proveedor y todos los articulos', 'error');
       return;
     }
+    const total = items.reduce((s, it) => s + Number(it.cantidad) * Number(it.costoUnitario), 0);
+    const proveedor = proveedores.find((p) => String(p.id) === String(compraForm.proveedorId))?.nombre || '';
+    if (!(await confirmarAccion(confirmDialog,
+      `¿Registrar la compra a ${proveedor} por $${total.toFixed(2)} (${items.length} artículo(s))?`,
+      { title: 'Confirmar compra', confirmLabel: 'Sí, registrar' }))) return;
     try {
       await comprasApi.createCompra({
         ...compraForm,
@@ -58,9 +64,16 @@ export default function Compras() {
   }
 
   async function handleMarcarRealizada(id) {
-    await comprasApi.marcarCompraRealizada(id);
-    notify('Compra marcada como realizada: se actualizo inventario y caja', 'success');
-    loadCompras();
+    if (!(await confirmarAccion(confirmDialog,
+      '¿Marcar la compra como realizada? Se sumará al inventario y se registrará el egreso en caja.',
+      { title: 'Confirmar compra realizada', confirmLabel: 'Sí, marcar' }))) return;
+    try {
+      await comprasApi.marcarCompraRealizada(id);
+      notify('Compra marcada como realizada: se actualizo inventario y caja', 'success');
+      loadCompras();
+    } catch (err) {
+      notify(err.response?.data?.message || 'No se pudo marcar la compra', 'error');
+    }
   }
 
   return (

@@ -6,6 +6,7 @@ import { useNotify } from '../context/NotifyContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
+import { confirmarAccion } from '../utils/confirmaciones.js';
 
 const ESTADO_BADGE = {
   PENDIENTE: 'bg-amber-100 text-amber-700',
@@ -81,6 +82,9 @@ export default function Caja() {
       notify('Selecciona una categoria e indica el monto', 'error');
       return;
     }
+    if (!(await confirmarAccion(confirmDialog,
+      `¿Registrar un egreso por $${Number(form.monto).toFixed(2)}?${comprobante ? '' : '\nSin comprobante quedará pendiente de aprobación.'}`,
+      { title: 'Confirmar egreso', confirmLabel: 'Sí, registrar' }))) return;
     try {
       await cajaApi.registrarEgreso(form, comprobante);
       notify(comprobante ? 'Egreso registrado' : 'Egreso registrado, queda pendiente de aprobacion (sin comprobante)', 'success');
@@ -111,6 +115,8 @@ export default function Caja() {
       notify('El motivo es obligatorio', 'error');
       return;
     }
+    if (!(await confirmarAccion(confirmDialog, '¿Rechazar este egreso?',
+      { title: 'Confirmar rechazo', confirmLabel: 'Sí, rechazar', danger: true }))) return;
     try {
       await cajaApi.rechazarMovimiento(modalRechazar.id, modalRechazar.motivo);
       notify('Egreso rechazado', 'success');

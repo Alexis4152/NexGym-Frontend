@@ -275,8 +275,11 @@ export default function PublicApartar() {
     notify(`"${producto.nombre}" agregado a tu apartado`, 'success');
   }
 
-  function cambiarCantidad(articuloId, cantidad) {
+  async function cambiarCantidad(articuloId, cantidad) {
     if (cantidad < 1) {
+      const linea = cart.find((i) => i.articuloId === articuloId);
+      if (!(await confirmDialog(`¿Quitar "${linea?.nombre || 'este producto'}" de tu apartado?`,
+        { title: 'Quitar producto', confirmLabel: 'Sí, quitar', danger: true }))) return;
       setCart((prev) => prev.filter((i) => i.articuloId !== articuloId));
       return;
     }

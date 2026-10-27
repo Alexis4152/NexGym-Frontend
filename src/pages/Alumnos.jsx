@@ -3,10 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import * as alumnosApi from '../api/alumnos';
 import * as disciplinasApi from '../api/disciplinas';
 import { useNotify } from '../context/NotifyContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
 import PhoneInput from '../components/PhoneInput.jsx';
 import { generarQrDataUrl } from '../utils/qr.js';
+import { confirmarAccion, confirmarGuardado } from '../utils/confirmaciones.js';
 
 // Un QR leido por un lector "escribe" el token completo + Enter; una busqueda a mano
 // nunca llega a esta longitud (ver misma nota en Asistencia.jsx).
@@ -33,6 +35,12 @@ export default function Alumnos() {
   const [modalQrNuevo, setModalQrNuevo] = useState(null); // { nombre, qrImagen }
   const { notify, confirmDialog } = useNotify();
   const navigate = useNavigate();
+  const { user, hasPermiso } = useAuth();
+  // Un instructor solo consulta a los alumnos de sus clases: nunca agrega, edita ni da de baja.
+  const esInstructor = !!user?.esInstructor;
+  const puedeCrear = !esInstructor && hasPermiso('ALUMNOS_CREAR');
+  const puedeEditar = !esInstructor && hasPermiso('ALUMNOS_EDITAR');
+  const puedeDarBaja = !esInstructor && hasPermiso('ALUMNOS_BAJA');
 
   function handleImprimirQrNuevo() {
     const ventana = window.open('', '_blank', 'width=400,height=500');
@@ -90,6 +98,10 @@ export default function Alumnos() {
   async function handleSubirFoto(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!(await confirmarAccion(confirmDialog, `¿Cambiar la foto de "${form.nombre}" por "${file.name}"?`))) {
+      e.target.value = '';
+      return;
+    }
     setSubiendoFoto(true);
     try {
       const { data } = await alumnosApi.subirFotoAlumno(modal.editing, file);
@@ -117,6 +129,7 @@ export default function Alumnos() {
       return;
     }
     const payload = { ...form, fechaNacimiento: form.fechaNacimiento || null };
+    if (!(await confirmarGuardado(confirmDialog, { editando: !!modal.editing, que: 'al alumno', nombre: form.nombre }))) return;
     try {
       if (modal.editing) {
         await alumnosApi.updateAlumno(modal.editing, payload);
@@ -151,11 +164,18 @@ export default function Alumnos() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-gray-800">Alumnos</h1>
-        <button className="btn-primary" onClick={openCreate}>
-          + Nuevo alumno
-        </button>
+        <h1 className="text-xl font-bold text-gray-800">{esInstructor ? 'Alumnos de mis clases' : 'Alumnos'}</h1>
+        {puedeCrear && (
+          <button className="btn-primary" onClick={openCreate}>
+            + Nuevo alumno
+          </button>
+        )}
       </div>
+      {esInstructor && (
+        <p className="text-sm text-gray-500 -mt-4 mb-4">
+          Solo ves a los alumnos registrados a tus clases. Para cualquier cambio, pide ayuda en recepción.
+        </p>
+      )}
 
       <input className="input max-w-xs mb-4" placeholder="Buscar por nombre o escanea su QR..." value={q}
         onChange={(e) => { setPage(0); setQ(e.target.value); }} onKeyDown={handleBuscarKeyDown} />
@@ -185,10 +205,12 @@ export default function Alumnos() {
                 </td>
                 <td className="text-gray-500">{a.fechaIngreso}</td>
                 <td className="text-right space-x-2">
-                  <button className="text-brand-600 hover:underline" onClick={() => openEdit(a)}>
-                    Editar
-                  </button>
-                  {a.estado === 'ACTIVO' && (
+                  {puedeEditar && (
+                    <button className="text-brand-600 hover:underline" onClick={() => openEdit(a)}>
+                      Editar
+                    </button>
+                  )}
+                  {puedeDarBaja && a.estado === 'ACTIVO' && (
                     <button className="text-red-600 hover:underline" onClick={() => handleDeactivate(a)}>
                       Baja
                     </button>

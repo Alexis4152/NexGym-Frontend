@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as authApi from '../api/auth';
 import { useNotify } from '../context/NotifyContext.jsx';
 import PasswordInput from '../components/PasswordInput.jsx';
+import { confirmarAccion } from '../utils/confirmaciones.js';
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -12,7 +13,7 @@ export default function ResetPassword() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { notify } = useNotify();
+  const { notify, confirmDialog } = useNotify();
   const navigate = useNavigate();
 
   async function handleSubmit(e) {
@@ -25,6 +26,7 @@ export default function ResetPassword() {
       notify('Las contrasenas no coinciden', 'error');
       return;
     }
+    if (!(await confirmarAccion(confirmDialog, '¿Cambiar tu contraseña?', { title: 'Confirmar cambio', confirmLabel: 'Sí, cambiar' }))) return;
     setLoading(true);
     try {
       await authApi.resetPassword(token, newPassword);

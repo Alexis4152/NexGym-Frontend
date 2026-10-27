@@ -5,6 +5,7 @@ import { useNotify } from '../context/NotifyContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
 import { planLleno, textoCupo } from '../utils/planes.js';
+import { confirmarGuardado } from '../utils/confirmaciones.js';
 
 const TIPOS_PLAN = [
   { value: 'PERIODO', label: 'Por periodo (semanal, mensual, anual...)' },
@@ -87,6 +88,7 @@ export default function Planes() {
       limiteAlumnos: planForm.limiteAlumnos ? Number(planForm.limiteAlumnos) : null,
       disciplinaIds: planForm.accesoCompleto ? [] : planForm.disciplinaIds,
     };
+    if (!(await confirmarGuardado(confirmDialog, { editando: !!modalPlan.editing, que: 'el plan', nombre: planForm.nombre }))) return;
     try {
       if (modalPlan.editing) {
         await planesApi.updateMembresiaPlan(modalPlan.editing, payload);

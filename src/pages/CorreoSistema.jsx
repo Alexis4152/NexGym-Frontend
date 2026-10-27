@@ -48,6 +48,8 @@ export default function CorreoSistema() {
   }
 
   async function handleTest() {
+    if (!(await confirmDialog(`¿Enviar un correo de prueba a ${user?.email || 'tu correo'}?`,
+      { title: 'Confirmar envío', confirmLabel: 'Sí, enviar' }))) return;
     setTesting(true);
     try {
       const { data } = await testMailConfig();

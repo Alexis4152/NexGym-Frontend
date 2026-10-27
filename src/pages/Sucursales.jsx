@@ -3,6 +3,7 @@ import * as sucursalesApi from '../api/sucursales';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
+import { confirmarGuardado } from '../utils/confirmaciones.js';
 import DomicilioForm, { domicilioDesde, domicilioVacio, validarDomicilio, erroresDomicilioDelServidor } from '../components/DomicilioForm.jsx';
 
 const emptySucursalForm = () => ({ nombre: '', domicilio: domicilioVacio(), notas: '', direccionAnterior: '' });
@@ -56,6 +57,7 @@ export default function Sucursales() {
       return;
     }
     const payload = { nombre: sucursalForm.nombre, domicilio: sucursalForm.domicilio, notas: sucursalForm.notas };
+    if (!(await confirmarGuardado(confirmDialog, { editando: !!modalSucursal.editing, que: 'la sucursal', nombre: sucursalForm.nombre }))) return;
     try {
       if (modalSucursal.editing) {
         await sucursalesApi.updateSucursal(modalSucursal.editing, payload);

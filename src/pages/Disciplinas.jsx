@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import * as disciplinasApi from '../api/disciplinas';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
+import { confirmarGuardado } from '../utils/confirmaciones.js';
 
 const emptyForm = { nombre: '', descripcion: '', icono: '', color: '#1c6690', modalidad: 'CLASES', limiteAlumnos: '', requiereInstalacion: true };
 
@@ -62,6 +63,7 @@ export default function Disciplinas() {
       return;
     }
     const payload = { ...form, limiteAlumnos: form.limiteAlumnos ? Number(form.limiteAlumnos) : null };
+    if (!(await confirmarGuardado(confirmDialog, { editando: !!modal.editing, que: 'la disciplina', nombre: form.nombre }))) return;
     try {
       if (modal.editing) {
         await disciplinasApi.updateDisciplina(modal.editing, payload);

@@ -4,13 +4,14 @@ import * as authApi from '../api/auth';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useNotify } from '../context/NotifyContext.jsx';
 import PasswordInput from '../components/PasswordInput.jsx';
+import { confirmarAccion } from '../utils/confirmaciones.js';
 
 export default function ChangePasswordRequired() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { user, setUser } = useAuth();
-  const { notify } = useNotify();
+  const { notify, confirmDialog } = useNotify();
   const navigate = useNavigate();
 
   async function handleSubmit(e) {
@@ -23,6 +24,7 @@ export default function ChangePasswordRequired() {
       notify('Las contrasenas no coinciden', 'error');
       return;
     }
+    if (!(await confirmarAccion(confirmDialog, '¿Guardar tu nueva contraseña?', { title: 'Confirmar cambio', confirmLabel: 'Sí, guardar' }))) return;
     setLoading(true);
     try {
       await authApi.changePassword(null, newPassword);

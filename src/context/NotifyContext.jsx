@@ -16,6 +16,7 @@ export function NotifyProvider({ children }) {
   const confirmDialog = useCallback((message, opts = {}) => {
     return new Promise((resolve) => {
       setConfirmState({
+        title: opts.title || null,
         message,
         confirmLabel: opts.confirmLabel || 'Confirmar',
         cancelLabel: opts.cancelLabel || 'Cancelar',
@@ -54,7 +55,8 @@ export function NotifyProvider({ children }) {
           onKeyDown={(e) => e.key === 'Escape' && handleConfirm(false)}
         >
           <div className="card w-full max-w-sm">
-            <p className="text-sm text-gray-800 mb-4">{confirmState.message}</p>
+            {confirmState.title && <h3 className="font-semibold text-gray-900 mb-2">{confirmState.title}</h3>}
+            <p className="text-sm text-gray-800 mb-4 whitespace-pre-line">{confirmState.message}</p>
             <div className="flex justify-end gap-2">
               <button className="btn-secondary" onClick={() => handleConfirm(false)}>
                 {confirmState.cancelLabel}

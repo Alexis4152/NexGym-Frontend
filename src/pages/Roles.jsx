@@ -4,6 +4,7 @@ import { SECTIONS } from '../config/sections.js';
 import { useNotify } from '../context/NotifyContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
+import { confirmarGuardado } from '../utils/confirmaciones.js';
 
 const emptyForm = { nombre: '', secciones: [], nivel: 'OPERATIVO', permisos: [] };
 
@@ -102,6 +103,7 @@ export default function Roles() {
       notify('Ingresa un nombre y selecciona al menos una seccion', 'error');
       return;
     }
+    if (!(await confirmarGuardado(confirmDialog, { editando: !!modal.editing, que: 'el rol', nombre: form.nombre }))) return;
     try {
       if (modal.editing) {
         await rolesApi.updateRol(modal.editing, form);

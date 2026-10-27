@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
+import { confirmarGuardado } from '../utils/confirmaciones.js';
 
 const emptyForm = { nombre: '', email: '', rolId: '', sucursalId: '', sucursalesAdicionalesIds: [] };
 
@@ -94,6 +95,9 @@ export default function Usuarios() {
       sucursalId: form.sucursalId || sucursalUnica || null,
       sucursalesAdicionalesIds: requiereSucursal ? form.sucursalesAdicionalesIds : [],
     };
+    if (!(await confirmarGuardado(confirmDialog, {
+      editando: !!modal.editing, que: 'al usuario', nombre: modal.editing ? form.nombre : `${form.nombre} (${form.email})`,
+    }))) return;
     try {
       if (modal.editing) {
         await usuariosApi.updateUsuario(modal.editing, payload);

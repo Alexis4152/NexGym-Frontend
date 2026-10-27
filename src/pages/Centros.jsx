@@ -3,13 +3,14 @@ import * as centrosApi from '../api/centros';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Modal from '../components/Modal.jsx';
+import { confirmarGuardado } from '../utils/confirmaciones.js';
 
 export default function Centros() {
   const [centros, setCentros] = useState([]);
   const [modal, setModal] = useState(false);
   const [nombre, setNombre] = useState('');
   const { selectCentro } = useAuth();
-  const { notify } = useNotify();
+  const { notify, confirmDialog } = useNotify();
 
   useEffect(() => {
     load();
@@ -22,6 +23,7 @@ export default function Centros() {
   async function handleCreate(e) {
     e.preventDefault();
     if (!nombre.trim()) return;
+    if (!(await confirmarGuardado(confirmDialog, { editando: false, que: 'el centro', nombre }))) return;
     try {
       await centrosApi.createCentro({ nombre });
       notify('Centro creado', 'success');

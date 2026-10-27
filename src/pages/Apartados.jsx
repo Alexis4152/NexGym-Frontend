@@ -7,6 +7,7 @@ import Modal from '../components/Modal.jsx';
 import Pagination from '../components/Pagination.jsx';
 import ApartadosPlanPanel from '../components/ApartadosPlanPanel.jsx';
 import { printVentaTicket } from '../utils/printer';
+import { confirmarAccion } from '../utils/confirmaciones.js';
 
 // Cada cuanto se revisa si llegaron apartados nuevos de la tienda en linea mientras esta
 // pantalla esta abierta (aviso propio de este modulo, aparte de la campana global).
@@ -232,6 +233,9 @@ export default function Apartados() {
 
   async function handleCompletar(e) {
     e.preventDefault();
+    if (!(await confirmarAccion(confirmDialog,
+      `¿Completar el apartado #${modalCompletar.id} de ${modalCompletar.clienteNombre || 'este cliente'} (${metodoPago})? Se registrará la venta y se entregará el producto.`,
+      { title: 'Confirmar entrega', confirmLabel: 'Sí, completar' }))) return;
     try {
       const { data } = await apartadosApi.completarApartado(modalCompletar.id, {
         metodoPago,
@@ -251,6 +255,9 @@ export default function Apartados() {
 
   async function handleCancelar(e) {
     e.preventDefault();
+    if (!(await confirmarAccion(confirmDialog,
+      `¿Cancelar el apartado #${modalCancelar.id} de ${modalCancelar.clienteNombre || 'este cliente'}? El stock regresará al inventario.`,
+      { title: 'Confirmar cancelación', confirmLabel: 'Sí, cancelar', danger: true }))) return;
     try {
       await apartadosApi.cancelarApartado(modalCancelar.id, { motivo: motivo || null });
       notify('Apartado cancelado', 'success');

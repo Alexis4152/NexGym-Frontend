@@ -260,7 +260,10 @@ export default function VentaPos() {
     setCart((prev) => prev.map((i) => (i.articuloId === articuloId ? { ...i, descuento: valor } : i)));
   }
 
-  function removeItem(articuloId) {
+  async function removeItem(articuloId) {
+    const linea = cart.find((i) => i.articuloId === articuloId);
+    const ok = await confirmDialog(`¿Quitar "${linea?.nombre || 'este artículo'}" del carrito?`, { confirmLabel: 'Sí, quitar', danger: true });
+    if (!ok) return;
     setCart((prev) => prev.filter((i) => i.articuloId !== articuloId));
   }
 

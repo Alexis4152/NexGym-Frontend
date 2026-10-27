@@ -5,8 +5,12 @@ import * as sucursalesApi from '../api/sucursales';
 import { useNotify } from '../context/NotifyContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
+import { confirmarGuardado } from '../utils/confirmaciones.js';
 
 const emptyLugarForm = { sucursalId: '', nombre: '', direccion: '', notas: '', capacidadMaxima: '', disciplinaIds: [] };
+
+// Misma comparacion que LugarService#normalizar: sin mayusculas, acentos ni espacios de mas.
+const normalizar = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
 
 export default function Instalaciones() {
   const [disciplinas, setDisciplinas] = useState([]);
@@ -14,6 +18,7 @@ export default function Instalaciones() {
   const [lugares, setLugares] = useState([]);
   const [modalLugar, setModalLugar] = useState(null);
   const [lugarForm, setLugarForm] = useState(emptyLugarForm);
+  const [lugarErrors, setLugarErrors] = useState({});
   const { notify, confirmDialog } = useNotify();
   const { hasPermiso } = useAuth();
   const puedeAdministrar = hasPermiso('INSTALACIONES_ADMINISTRAR');
@@ -32,6 +37,7 @@ export default function Instalaciones() {
 
   function openCreateLugar() {
     setLugarForm({ ...emptyLugarForm, sucursalId: unicaSucursal ? unicaSucursal.id : '' });
+    setLugarErrors({});
     setModalLugar({ editing: null });
   }
 
@@ -40,6 +46,7 @@ export default function Instalaciones() {
       sucursalId: l.sucursalId, nombre: l.nombre, direccion: l.direccion || '', notas: l.notas || '',
       capacidadMaxima: l.capacidadMaxima ?? '', disciplinaIds: l.disciplinaIds ? [...l.disciplinaIds] : [],
     });
+    setLugarErrors({});
     setModalLugar({ editing: l.id });
   }
 
@@ -60,7 +67,21 @@ export default function Instalaciones() {
       notify('Selecciona a que sucursal pertenece', 'error');
       return;
     }
+    // Aviso inmediato con la lista ya cargada; el backend vuelve a validar (y es el que manda).
+    const mismaSucursal = lugares.filter((l) => String(l.sucursalId) === String(lugarForm.sucursalId) && l.id !== modalLugar.editing);
+    const nombreRepetido = mismaSucursal.find((l) => normalizar(l.nombre) === normalizar(lugarForm.nombre));
+    const direccionRepetida = normalizar(lugarForm.direccion)
+      && mismaSucursal.find((l) => normalizar(l.direccion) === normalizar(lugarForm.direccion));
+    const errs = {};
+    if (nombreRepetido) errs.nombre = `Ya existe la instalación "${nombreRepetido.nombre}" en esta sucursal. Usa un nombre diferente.`;
+    if (direccionRepetida) errs.direccion = `La instalación "${direccionRepetida.nombre}" ya tiene esa dirección. Usa una dirección diferente.`;
+    setLugarErrors(errs);
+    if (Object.keys(errs).length) {
+      notify(Object.values(errs)[0], 'error');
+      return;
+    }
     const payload = { ...lugarForm, capacidadMaxima: lugarForm.capacidadMaxima ? Number(lugarForm.capacidadMaxima) : null };
+    if (!(await confirmarGuardado(confirmDialog, { editando: !!modalLugar.editing, que: 'la instalación', nombre: lugarForm.nombre }))) return;
     try {
       if (modalLugar.editing) {
         await lugaresApi.updateLugar(modalLugar.editing, payload);
@@ -72,7 +93,10 @@ export default function Instalaciones() {
       setModalLugar(null);
       loadLugares();
     } catch (err) {
-      notify(err.response?.data?.message || 'No se pudo guardar la instalacion', 'error');
+      const data = err.response?.data?.data;
+      const errsServidor = data && typeof data === 'object' ? data : {};
+      setLugarErrors(errsServidor);
+      notify(Object.values(errsServidor)[0] || err.response?.data?.message || 'No se pudo guardar la instalacion', 'error');
     }
   }
 
@@ -145,10 +169,12 @@ export default function Instalaciones() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
               <input className="input" placeholder="Ej. Alberca A" value={lugarForm.nombre} onChange={(e) => setLugarForm({ ...lugarForm, nombre: e.target.value })} />
+              {lugarErrors.nombre && <p className="text-xs text-red-600 mt-1">{lugarErrors.nombre}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Direccion</label>
               <input className="input" placeholder="Ej. Av. Reforma 123, Piso 2" value={lugarForm.direccion} onChange={(e) => setLugarForm({ ...lugarForm, direccion: e.target.value })} />
+              {lugarErrors.direccion && <p className="text-xs text-red-600 mt-1">{lugarErrors.direccion}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Capacidad maxima (opcional)</label>

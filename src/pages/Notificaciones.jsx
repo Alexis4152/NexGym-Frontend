@@ -4,6 +4,7 @@ import * as notificacionesApi from '../api/notificaciones';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useNotify } from '../context/NotifyContext.jsx';
 import Pagination from '../components/Pagination.jsx';
+import { confirmarAccion } from '../utils/confirmaciones.js';
 
 const TIPO_LABEL = {
   MEMBRESIA_NUEVA: 'Membresía nueva',
@@ -53,7 +54,7 @@ export default function Notificaciones() {
   const [pageData, setPageData] = useState({ content: [], totalPages: 0 });
   const [page, setPage] = useState(0);
   const [ejecutando, setEjecutando] = useState(null);
-  const { notify } = useNotify();
+  const { notify, confirmDialog } = useNotify();
   const { isSuperAdmin } = useAuth();
 
   function cargar() {
@@ -79,6 +80,11 @@ export default function Notificaciones() {
   }
 
   async function handleEjecutar(tipo) {
+    if (!(await confirmarAccion(confirmDialog,
+      tipo === 'membresias'
+        ? '¿Ejecutar ahora el envío de avisos de membresías? Se mandarán las notificaciones pendientes a los alumnos.'
+        : '¿Ejecutar ahora el envío de recordatorios de clases?',
+      { title: 'Confirmar envío', confirmLabel: 'Sí, ejecutar' }))) return;
     setEjecutando(tipo);
     try {
       if (tipo === 'membresias') await notificacionesApi.ejecutarSchedulerMembresias();

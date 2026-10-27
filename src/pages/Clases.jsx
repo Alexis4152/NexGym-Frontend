@@ -7,6 +7,7 @@ import * as sucursalesApi from '../api/sucursales';
 import { useNotify } from '../context/NotifyContext.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
+import { confirmarGuardado } from '../utils/confirmaciones.js';
 
 const DIAS = ['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO', 'DOMINGO'];
 const emptyForm = { sucursalId: '', disciplinaId: '', instructorId: '', diaSemana: 'LUNES', horaInicio: '18:00', horaFin: '19:00', lugarId: '', capacidadMaxima: 20 };
@@ -20,7 +21,10 @@ export default function Clases() {
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const { notify, confirmDialog } = useNotify();
-  const { hasPermiso } = useAuth();
+  const { user, hasPermiso } = useAuth();
+  // Un instructor solo recibe sus propias clases del backend; aqui solo cambia el titulo.
+  const esInstructor = !!user?.esInstructor;
+  const [modalAlumnos, setModalAlumnos] = useState(null); // { clase, alumnos: null | [] }
   const puedeCrear = hasPermiso('CLASES_CREAR');
   const puedeEditar = hasPermiso('CLASES_EDITAR');
   const puedeCancelar = hasPermiso('CLASES_CANCELAR');
@@ -96,6 +100,11 @@ export default function Clases() {
       lugarId: requiereInstalacion ? form.lugarId : null,
       capacidadMaxima: Number(form.capacidadMaxima),
     };
+    const disciplinaNombre = disciplinas.find((d) => String(d.id) === String(form.disciplinaId))?.nombre;
+    if (!(await confirmarGuardado(confirmDialog, {
+      editando: !!modal.editing, que: 'la clase',
+      nombre: `${disciplinaNombre || ''} ${form.diaSemana} ${form.horaInicio}-${form.horaFin}`,
+    }))) return;
     try {
       if (modal.editing) {
         await clasesApi.updateClase(modal.editing, payload);
@@ -119,12 +128,23 @@ export default function Clases() {
     load();
   }
 
+  async function verAlumnos(c) {
+    setModalAlumnos({ clase: c, alumnos: null });
+    try {
+      const { data } = await clasesApi.listAlumnosDeClase(c.id);
+      setModalAlumnos({ clase: c, alumnos: data.data });
+    } catch (err) {
+      setModalAlumnos(null);
+      notify(err.response?.data?.message || 'No se pudo cargar la lista de alumnos', 'error');
+    }
+  }
+
   const direccionSeleccionada = lugaresFiltrados.find((l) => String(l.id) === String(form.lugarId))?.direccion;
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-gray-800">Clases y horarios</h1>
+        <h1 className="text-xl font-bold text-gray-800">{esInstructor ? 'Mis clases' : 'Clases y horarios'}</h1>
         {puedeCrear && (
           <button className="btn-primary" onClick={openCreate}>
             + Nueva clase
@@ -151,12 +171,11 @@ export default function Clases() {
                         <span className="text-gray-400"> · cupo {c.capacidadMaxima}</span>
                         {c.lugarDireccion && <div className="text-xs text-gray-400">{c.lugarDireccion}</div>}
                       </div>
-                      {(puedeEditar || puedeCancelar) && (
-                        <div className="space-x-2">
-                          {puedeEditar && <button className="text-brand-600 hover:underline" onClick={() => openEdit(c)}>Editar</button>}
-                          {puedeCancelar && <button className="text-red-600 hover:underline" onClick={() => handleDeactivate(c)}>Desactivar</button>}
-                        </div>
-                      )}
+                      <div className="space-x-2 whitespace-nowrap">
+                        <button className="text-gray-600 hover:underline" onClick={() => verAlumnos(c)}>Ver alumnos</button>
+                        {puedeEditar && <button className="text-brand-600 hover:underline" onClick={() => openEdit(c)}>Editar</button>}
+                        {puedeCancelar && <button className="text-red-600 hover:underline" onClick={() => handleDeactivate(c)}>Desactivar</button>}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -234,6 +253,41 @@ export default function Clases() {
             </div>
             <button className="btn-primary w-full mt-2">{modal.editing ? 'Guardar cambios' : 'Crear clase'}</button>
           </form>
+        </Modal>
+      )}
+
+      {modalAlumnos && (
+        <Modal
+          title={`Alumnos · ${modalAlumnos.clase.disciplinaNombre} ${modalAlumnos.clase.diaSemana.charAt(0) + modalAlumnos.clase.diaSemana.slice(1).toLowerCase()} ${modalAlumnos.clase.horaInicio.slice(0, 5)}`}
+          onClose={() => setModalAlumnos(null)}
+        >
+          {modalAlumnos.alumnos === null ? (
+            <p className="text-sm text-gray-400">Cargando...</p>
+          ) : modalAlumnos.alumnos.length === 0 ? (
+            <p className="text-sm text-gray-500">Aún no hay alumnos registrados a esta clase.</p>
+          ) : (
+            <>
+              <p className="text-xs text-gray-400 mb-2">
+                {modalAlumnos.alumnos.length} alumno(s): inscritos a {modalAlumnos.clase.disciplinaNombre}, con membresía que la incluye o con reserva en esta clase. Solo lectura.
+              </p>
+              <ul className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+                {modalAlumnos.alumnos.map((a) => (
+                  <li key={a.id} className="flex items-center gap-3 py-2 text-sm">
+                    {a.fotoUrl
+                      ? <img src={a.fotoUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+                      : <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">👤</div>}
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-800">{a.nombre}</p>
+                      <p className="text-xs text-gray-400 truncate">{[a.telefono, a.email].filter(Boolean).join(' · ') || 'Sin contacto'}</p>
+                    </div>
+                    {a.estado && a.estado !== 'ACTIVO' && (
+                      <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{a.estado.toLowerCase()}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </Modal>
       )}
     </div>
