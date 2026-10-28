@@ -5,6 +5,7 @@ import { useNotify } from '../context/NotifyContext.jsx';
 import { NAV_GROUPS } from '../config/sections.js';
 import { useEscapeClose } from '../hooks/useEscapeClose.js';
 import { getApartadosPendientes } from '../api/apartados';
+import { contarSolicitudesArcoAbiertas } from '../api/arco';
 import NotificationBell from './NotificationBell.jsx';
 
 // Cada cuanto se revisan los apartados pendientes de la tienda en linea para el badge del
@@ -83,7 +84,14 @@ export default function Layout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [veApartados, user?.centroId, location.pathname === '/apartados']);
 
-  const badges = { APARTADOS: apartadosPendientes };
+  // Solicitudes ARCO sin cerrar (solo SUPER_ADMIN las atiende): badge en "Solicitudes ARCO".
+  const [arcoAbiertas, setArcoAbiertas] = useState(0);
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    contarSolicitudesArcoAbiertas().then(({ data }) => setArcoAbiertas(data.data || 0)).catch(() => {});
+  }, [isSuperAdmin, location.pathname]);
+
+  const badges = { APARTADOS: apartadosPendientes, ARCO: arcoAbiertas };
   const badgeDe = (codigo) => badges[codigo] || 0;
   const Badge = ({ n }) => n > 0 && (
     <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold">{n}</span>

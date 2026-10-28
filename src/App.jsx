@@ -39,6 +39,10 @@ import Roles from './pages/Roles.jsx';
 import Centros from './pages/Centros.jsx';
 import CentroInfo from './pages/CentroInfo.jsx';
 import CorreoSistema from './pages/CorreoSistema.jsx';
+import ArcoSolicitud from './pages/ArcoSolicitud.jsx';
+import ArcoSeguimiento from './pages/ArcoSeguimiento.jsx';
+import MisSolicitudesArco from './pages/MisSolicitudesArco.jsx';
+import SolicitudesArco from './pages/SolicitudesArco.jsx';
 
 export default function App() {
   return (
@@ -48,6 +52,9 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/tienda/:slug" element={<PublicApartar />} />
+      {/* Derechos ARCO: de la plataforma, sin centro ni sesion (el link del correo es la credencial) */}
+      <Route path="/arco" element={<ArcoSolicitud />} />
+      <Route path="/arco/seguimiento/:token" element={<ArcoSeguimiento />} />
 
       {/* Autenticadas, sin sidebar */}
       <Route
@@ -132,6 +139,8 @@ export default function App() {
         <Route path="/sucursales" element={<PrivateRoute section="CLASES"><Sucursales /></PrivateRoute>} />
         <Route path="/centros" element={<PrivateRoute superAdminOnly><Centros /></PrivateRoute>} />
         <Route path="/correo-sistema" element={<PrivateRoute superAdminOnly><CorreoSistema /></PrivateRoute>} />
+        <Route path="/solicitudes-arco" element={<PrivateRoute superAdminOnly><SolicitudesArco /></PrivateRoute>} />
+        <Route path="/mis-solicitudes-arco" element={<PrivateRoute><MisSolicitudesArco /></PrivateRoute>} />
       </Route>
     </Routes>
   );

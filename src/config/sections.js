@@ -106,6 +106,9 @@ export const NAV_GROUPS = [
       { code: 'SUCURSALES', label: 'Sucursales', path: '/sucursales', requires: 'admin' },
       { code: 'CENTROS', label: 'Centros', path: '/centros', requires: 'superAdmin' },
       { code: 'CORREO_SISTEMA', label: 'Correo del sistema', path: '/correo-sistema', requires: 'superAdmin' },
+      { code: 'ARCO', label: 'Solicitudes ARCO', path: '/solicitudes-arco', requires: 'superAdmin' },
+      // Sin section/requires: cualquier usuario ve y levanta sus propias solicitudes ARCO.
+      { code: 'MIS_ARCO', label: 'Mis solicitudes ARCO', path: '/mis-solicitudes-arco' },
     ],
   },
 ];

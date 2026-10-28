@@ -57,6 +57,9 @@ export default function Login() {
         <button className="btn-primary w-full mt-5" disabled={loading}>
           {loading ? 'Entrando...' : 'Entrar'}
         </button>
+        <Link to="/arco" className="block text-center text-xs text-gray-400 hover:text-brand-600 hover:underline mt-4">
+          Aviso de privacidad y derechos ARCO
+        </Link>
       </form>
     </div>
   );

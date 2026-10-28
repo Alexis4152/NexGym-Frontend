@@ -108,6 +108,12 @@ export default function CorreoSistema() {
           </div>
         </div>
 
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg px-4 py-3">
+          El "De:" de cada correo siempre sale con esta cuenta (Gmail no permite mandar con un remitente distinto al
+          autenticado). Lo que cambia por centro es el nombre visible y el "Responder a", que toma el correo de
+          contacto de cada centro en Configuración del centro → Correo de contacto.
+        </div>
+
         <div className="flex flex-wrap gap-2">
           <button className="btn-primary" disabled={saving}>
             {saving ? 'Guardando...' : 'Guardar configuración'}
